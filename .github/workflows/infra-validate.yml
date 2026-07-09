@@ -1,0 +1,95 @@
+# .github/workflows/infra-validate.yml
+# OWNED BY TEAM 1
+# Triggers: any PR touching infrastructure/ or ci/
+# Validates: Terraform fmt/validate, k3d config, Helm lint, Dockerfile lint
+
+name: "Infra Validate"
+
+on:
+  pull_request:
+    paths:
+      - 'infrastructure/**'
+      - 'ci/**'
+      - 'docker-compose.infra.yml'
+      - 'Makefile'
+      - 'shared/contracts/**'
+
+jobs:
+  terraform-validate:
+    name: Terraform fmt + validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.0"
+
+      - name: Terraform fmt check
+        run: |
+          terraform -chdir=infrastructure/terraform fmt -check -recursive
+          echo "Terraform fmt OK"
+
+      - name: Terraform validate (no AWS needed — just syntax)
+        run: |
+          cd infrastructure/terraform
+          terraform init -backend=false
+          terraform validate
+          echo "Terraform validate OK"
+
+  helm-lint:
+    name: Helm lint all charts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v3
+        with:
+          version: "3.14.0"
+
+      - name: Lint all Helm charts
+        run: |
+          for chart in infrastructure/helm/*/; do
+            echo "Linting $chart..."
+            helm lint "$chart"
+          done
+          echo "All Helm charts OK"
+
+  dockerfile-lint:
+    name: Hadolint — Dockerfile lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: ci/Dockerfile.agent
+
+  k3d-smoke-test:
+    name: k3d smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install k3d
+        run: curl -sfL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+
+      - name: Validate k3d config syntax
+        run: k3d cluster create --config infrastructure/k3d/cluster.yaml --no-hostip 2>&1 | head -5 || true
+        # Just validate config parses — don't actually create cluster in CI
+
+  contracts-check:
+    name: Shared contracts unchanged guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Warn if shared/contracts changed without all-team review
+        run: |
+          CHANGED=$(git diff --name-only origin/main...HEAD | grep '^shared/contracts/' || true)
+          if [ -n "$CHANGED" ]; then
+            echo "::warning::Shared contracts changed: $CHANGED"
+            echo "Ensure all 3 teams have reviewed this PR"
+          fi

@@ -1,0 +1,54 @@
+# =============================================================================
+# .gitignore — DevSecOps Factory
+# =============================================================================
+
+# ── Secrets and credentials — NEVER commit these ──────────
+.env
+.env.cloud
+.env.local
+*.key
+*.pem
+*.p12
+*.pfx
+secrets/
+kubeconfig*
+**/kubeconfig
+
+# ── Terraform state — contains sensitive data ─────────────
+**/.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+!*.tfvars.example
+.terraform.lock.hcl
+
+# ── Build artifacts ───────────────────────────────────────
+node_modules/
+build/
+dist/
+target/
+*.jar
+*.war
+
+# ── Security scan reports (generated, not source) ─────────
+/tmp/security-reports/
+dependency-check-report.*
+trivy-*.json
+zap-report.*
+semgrep-*.json
+gitleaks-report.json
+
+# ── IDE and OS files ──────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── Docker ────────────────────────────────────────────────
+.dockerignore
+
+# ── Logs ─────────────────────────────────────────────────
+*.log
+logs/

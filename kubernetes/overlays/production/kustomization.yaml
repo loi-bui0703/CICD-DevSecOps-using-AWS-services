@@ -1,0 +1,40 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: production
+resources:
+  - ../../base
+images:
+  - name: tetris-devsecops
+    newName: 997961584240.dkr.ecr.ap-southeast-1.amazonaws.com/devsecops/ecr
+    newTag: latest   # Promoted by Jenkins after manual approval
+patches:
+  - patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 3
+    target:
+      kind: Deployment
+      name: tetris
+  - patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: tetris.example.com
+    target:
+      kind: Ingress
+      name: tetris
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: "100m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: "128Mi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "500m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "256Mi"
+    target:
+      kind: Deployment
+      name: tetris

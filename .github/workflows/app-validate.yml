@@ -1,0 +1,90 @@
+# .github/workflows/app-validate.yml
+# Triggers: any PR touching app/ kubernetes/ cd/ monitoring/
+# Validates: Dockerfile build, k8s manifests, kustomize build, Prometheus rules
+
+name: "App Validate"
+
+on:
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'kubernetes/**'
+      - 'cd/**'
+      - 'monitoring/**'
+      - 'docker-compose.obs.yml'
+
+jobs:
+  dockerfile-build-test:
+    name: Docker build smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build app image (no push)
+        run: |
+          docker build -t tetris-test:ci app/
+          echo "Docker build OK"
+
+  kustomize-validate:
+    name: Kustomize build validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-kubectl@v3
+
+      - name: Kustomize build — staging
+        run: |
+          kubectl kustomize kubernetes/overlays/staging > /tmp/staging-manifest.yaml
+          echo "Staging manifest generated:"
+          kubectl apply --dry-run=client -f /tmp/staging-manifest.yaml
+          echo "Staging kustomize OK"
+
+      - name: Kustomize build — production
+        run: |
+          kubectl kustomize kubernetes/overlays/production > /tmp/prod-manifest.yaml
+          kubectl apply --dry-run=client -f /tmp/prod-manifest.yaml
+          echo "Production kustomize OK"
+
+  manifest-security-check:
+    name: kube-score security check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kube-score
+        run: |
+          curl -sfL https://github.com/zegl/kube-score/releases/latest/download/kube-score_linux_amd64.tar.gz \
+            | tar xz -C /usr/local/bin
+
+      - name: Score base manifests
+        run: |
+          kubectl kustomize kubernetes/base | kube-score score - || true
+          echo "kube-score complete"
+
+  argocd-apps-validate:
+    name: Validate ArgoCD app manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: YAML lint ArgoCD apps
+        run: |
+          pip install yamllint -q
+          yamllint cd/apps/ || true
+
+  prometheus-rules-validate:
+    name: Validate Prometheus rules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install promtool
+        run: |
+          PROM_VER=$(curl -sf https://api.github.com/repos/prometheus/prometheus/releases/latest | grep tag_name | cut -d'"' -f4)
+          curl -sfL "https://github.com/prometheus/prometheus/releases/download/${PROM_VER}/prometheus-${PROM_VER#v}.linux-amd64.tar.gz" \
+            | tar xz --strip-components=1 -C /tmp "prometheus-${PROM_VER#v}.linux-amd64/promtool"
+          sudo mv /tmp/promtool /usr/local/bin/
+      - name: Check rules
+        run: |
+          if ls monitoring/rules/*.yaml 2>/dev/null; then
+            promtool check rules monitoring/rules/*.yaml
+          fi
+          echo "Prometheus rules OK"

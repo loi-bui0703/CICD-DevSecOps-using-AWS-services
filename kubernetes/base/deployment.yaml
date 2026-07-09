@@ -1,0 +1,94 @@
+---
+# kubernetes/base/deployment.yaml — The blueprint for all infrastructe - staging and production is 2 exception of base infra
+
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: tetris
+  labels:
+    app: tetris
+    managed-by: argocd
+spec:
+  replicas: 1 # base we keep 1, staging also can 1, but production must more for health scability
+  selector:
+    matchLabels:
+      app: tetris
+  template:
+    metadata:
+      labels:
+        app: tetris
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      securityContext:
+        runAsNonRoot: true # ensure container never run as root permission
+        runAsUser: 1000 
+        fsGroup: 1000
+      containers:
+        - name: tetris
+          # Image is set by kustomize overlay 
+          image: tetris-devsecops:latest
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            timeoutSeconds: 2
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            timeoutSeconds: 2
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tetris
+  labels:
+    app: tetris
+spec:
+  selector:
+    app: tetris
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tetris
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: tetris.localhost   # overridden by kustomize overlay
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: tetris
+                port:
+                  number: 80

@@ -1,0 +1,43 @@
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: devsecops
+
+servers: 1
+agents: 2
+
+registries:
+  config: |
+    mirrors:
+      "localhost:5001":
+        endpoint:
+          - "http://local-registry:5000"
+
+
+
+kubeAPI:
+  host: "0.0.0.0"
+  hostPort: "6443"
+
+network: devsecops-net 
+
+ports:
+  - port: 80:80
+    nodeFilters:
+      - loadbalancer
+  - port: 443:443
+    nodeFilters:
+      - loadbalancer
+  - port: 8443:8443       
+    nodeFilters:
+      - loadbalancer
+
+options:
+  k3d:
+    wait: true
+    timeout: "120s"
+  k3s:
+    extraArgs:
+      - arg: --disable=traefik
+        nodeFilters:
+          - server:*

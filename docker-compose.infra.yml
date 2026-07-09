@@ -1,0 +1,59 @@
+# =============================================================================
+# docker-compose.infra.yml — Owner by Nhat linh (Infrastructure + CI/CD)
+#
+# Services: Jenkins CI (GitHub source + AWS ECR registry)
+# Ports: defined in shared/contracts/ports.yaml
+#
+# Run standalone (Team 1 testing):
+#   docker compose -f docker-compose.infra.yml up -d
+#
+# Run as part of full stack (root compose includes this):
+#   docker compose up -d   (from repo root)
+# =============================================================================
+
+networks:
+  devsecops:
+    name: ${DOCKER_NETWORK:-devsecops}
+    external: true
+
+volumes:
+  jenkins_home:
+
+services:
+
+  # ── Jenkins CI ─────────────────────────────────────────
+  # Pipeline orchestrator. GitHub source + AWS ECR registry
+  # Port: 8080 UI, 50000 agent
+  jenkins:
+    container_name: jenkins
+    restart: unless-stopped
+    user: root
+
+    build: 
+      context: .
+      dockerfile: ci/Dockerfile.master
+
+
+    environment:
+      DOCKER_HOST: unix:///var/run/docker.sock
+      JAVA_OPTS: >-
+        -Djenkins.install.runSetupWizard=false
+        -Dorg.jenkinsci.plugins.durabletask.BourneShellScript.HEARTBEAT_CHECK_INTERVAL=86400
+      CASC_JENKINS_CONFIG: /var/jenkins_home/casc_configs
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./ci/jenkins-casc.yaml:/var/jenkins_home/casc_configs/jenkins.yaml:ro
+      - ./ci/plugins.txt:/usr/share/jenkins/ref/plugins.txt:ro
+      - ./shared/contracts:/shared/contracts:ro
+    networks:
+      - devsecops
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s

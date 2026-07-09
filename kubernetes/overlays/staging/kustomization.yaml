@@ -1,0 +1,56 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: staging
+resources:
+  - ../../base
+images:
+  - name: tetris-devsecops
+    newName: localhost:5001/devsecops/tetris
+    newTag: latest   # Jenkins bumps this after successful security scans
+patches:
+  - patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+    target:
+      kind: Deployment
+      name: tetris
+  - patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: tetris-staging.example.com
+    target:
+      kind: Ingress
+      name: tetris
+  # Allow npm to write cache in staging (dev environment)
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/securityContext/readOnlyRootFilesystem
+        value: false
+    target:
+      kind: Deployment
+      name: tetris
+  # Add volumes for temporary files
+  - patch: |-
+      - op: add
+        path: /spec/template/spec/volumes
+        value:
+          - name: npm-cache
+            emptyDir: {}
+          - name: node-tmp
+            emptyDir: {}
+    target:
+      kind: Deployment
+      name: tetris
+  # Mount volumes to container
+  - patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts
+        value:
+          - name: npm-cache
+            mountPath: /home/node/.npm
+          - name: node-tmp
+            mountPath: /tmp
+    target:
+      kind: Deployment
+      name: tetris

@@ -1,0 +1,47 @@
+# =============================================================================
+# CODEOWNERS — GitHub enforced code ownership
+#
+# Format: <path pattern>  @<github-username-or-team>
+#
+# Each team MUST review PRs that touch their owned paths.
+# No PR merges to main without the owning team's approval.
+#
+# Team assignments:
+#   @team-infra    = Team 1 — Infrastructure + CI/CD
+#   @team-security = Team 2 — Security phases
+#   @team-app      = Team 3 — Application + CD + Observability
+#
+# Shared contracts: ALL teams must approve changes
+# =============================================================================
+
+# ── Shared contracts (all teams co-own) ───────────────────
+/shared/                   @team-infra @team-security @team-app
+/docker-compose.yml        @team-infra @team-security @team-app
+/Makefile                  @team-infra @team-security @team-app
+/.github/                  @team-infra
+
+# ── Team 1: Infrastructure + CI/CD ───────────────────────
+/infrastructure/           @team-infra
+/ci/Jenkinsfile            @team-infra
+/ci/Dockerfile.agent       @team-infra
+/ci/scripts/               @team-infra
+/docker-compose.infra.yml  @team-infra
+/.github/workflows/infra-* @team-infra
+
+# ── Team 2: Security ─────────────────────────────────────
+/security/                 @team-security
+/ci/stages/                @team-security        # security stage scripts
+/docker-compose.security.yml @team-security
+/.github/workflows/security-* @team-security
+
+# ── Team 3: App + CD + Observability ─────────────────────
+/app/                      @team-app
+/kubernetes/               @team-app
+/cd/                       @team-app
+/monitoring/               @team-app
+/docker-compose.obs.yml    @team-app
+/.github/workflows/app-*   @team-app
+
+# ── Docs: any team ───────────────────────────────────────
+/docs/                     @team-infra @team-security @team-app
+/README.md                 @team-infra

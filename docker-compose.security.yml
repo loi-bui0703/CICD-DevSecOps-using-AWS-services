@@ -1,0 +1,66 @@
+# =============================================================================
+# docker-compose.security.yml — OWNED BY My (Security)
+#
+# Ports: defined in shared/contracts/ports.yaml
+#
+# Run standalone:
+#   docker compose -f docker-compose.security.yml up -d
+#
+# Run as part of full stack:
+#   docker compose up -d   (from repo root, includes all modules)
+# =============================================================================
+
+
+
+#volumes:
+  
+
+#services:
+
+  
+# =============================================================================
+# docker-compose.security.yml — OWNED BY My (Security)
+#
+# Ports: defined in shared/contracts/ports.yaml
+#
+# Run standalone:
+#   docker compose -f docker-compose.security.yml up -d
+#
+# Run as part of full stack:
+#   docker compose up -d   (from repo root, includes all modules)
+# =============================================================================
+
+version: '3.8'
+
+networks:
+  devsecops:
+    name: ${DOCKER_NETWORK:-devsecops}
+    external: true
+
+volumes:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:
+
+services:
+  # --- SonarQube: Static Application Security Testing (SAST) ---
+  sonarqube:
+    image: sonarqube:community
+    container_name: sonarqube
+    restart: always
+    ports:
+      - "9000:9000"
+    networks:
+      - devsecops
+    environment:
+      - SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+
+  # --- DefectDojo: Vulnerability Management (Optional - referenced in Makefile) ---
+  # defectdojo:
+  #   image: defectdojo/defectdojo-django:latest
+  #   container_name: defectdojo
+  #   ... (add more config if needed later)

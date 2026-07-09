@@ -1,0 +1,83 @@
+# .github/workflows/security-validate.yml
+# OWNED BY TEAM 2
+# Triggers: any PR touching security/ or ci/stages/
+# Validates: Semgrep rules lint, Kyverno policy lint, ZAP config, Falco rules
+
+name: "Security Validate"
+
+on:
+  pull_request:
+    paths:
+      - 'security/**'
+      - 'ci/stages/**'
+      - 'docker-compose.security.yml'
+
+jobs:
+  semgrep-rules-validate:
+    name: Validate Semgrep rules syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install semgrep
+        run: pip install semgrep
+      - name: Validate rule files
+        run: |
+          if ls security/sast/*.yml 2>/dev/null; then
+            semgrep --validate security/sast/
+          fi
+
+  kyverno-policy-lint:
+    name: Lint Kyverno policies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kyverno CLI
+        run: |
+          curl -sfL https://github.com/kyverno/kyverno/releases/latest/download/kyverno_linux_amd64.tar.gz \
+            | tar xz -C /usr/local/bin kyverno
+
+      - name: Lint policies
+        run: |
+          if ls security/runtime/kyverno-policies/*.yaml 2>/dev/null; then
+            kyverno lint security/runtime/kyverno-policies/
+            echo "Kyverno policies OK"
+          fi
+
+  falco-rules-validate:
+    name: Validate Falco rules YAML
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install yamllint
+        run: pip install yamllint
+      - name: Lint Falco rules
+        run: |
+          if [ -f security/runtime/falco-rules.yaml ]; then
+            yamllint security/runtime/falco-rules.yaml
+          fi
+
+  scan-scripts-test:
+    name: Validate scan stage scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ShellCheck all stage scripts
+        run: |
+          sudo apt-get install -y shellcheck -q
+          shellcheck ci/stages/*.sh || true
+          echo "ShellCheck complete"
+
+  defectdojo-connector-test:
+    name: Test DefectDojo connector script
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      - name: Test import (no runtime needed)
+        run: |
+          if [ -f security/aggregation/defectdojo-connector.py ]; then
+            python3 -c "import ast; ast.parse(open('security/aggregation/defectdojo-connector.py').read()); print('Syntax OK')"
+          fi

@@ -1,0 +1,70 @@
+# ci/jenkins-casc.yaml — OWNED BY TEAM 1
+# Jenkins Configuration as Code (JCasC)
+# Auto-configures Jenkins on first boot — no manual UI setup.
+#
+# To apply changes: restart Jenkins container or POST to
+#   http://localhost:8080/configuration-as-code/reload
+
+jenkins:
+  systemMessage: "DevSecOps Factory — Local Environment"
+  numExecutors: 0   # Build only on agents, not controller
+
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "admin"
+          password: "${JENKINS_ADMIN_PASS:-admin123}"
+
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+
+  # Shared pipeline library — teams can add common functions here
+  globalNodeProperties:
+    - envVars:
+        env:
+          - key: "REGISTRY"
+            value: "${REGISTRY:-localhost:5001}"
+          - key: "SONAR_HOST"
+            value: "http://sonarqube:9000"
+          - key: "DEFECTDOJO_URL"
+            value: "http://defectdojo:8080"
+
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          # SonarQube token — Team 2 fills SONAR_TOKEN in .env
+          - string:
+              scope: GLOBAL
+              id: "sonar-token"
+              secret: "${SONAR_TOKEN:-placeholder-set-in-env}"
+              description: "SonarQube API token"
+
+          # DefectDojo API key — Team 2 fills DEFECTDOJO_API_KEY in .env
+          - string:
+              scope: GLOBAL
+              id: "defectdojo-api-key"
+              secret: "${DEFECTDOJO_API_KEY:-placeholder-set-in-env}"
+              description: "DefectDojo API key"
+
+          # Gitea credentials — Team 1 fills in .env
+          - usernamePassword:
+              scope: GLOBAL
+              id: "gitea-creds"
+              username: "${GITEA_ADMIN_USER:-gitadmin}"
+              password: "${GITEA_ADMIN_PASS:-gitadmin123}"
+              description: "Gitea admin credentials"
+
+unclassified:
+  sonarGlobalConfiguration:
+    buildWrapperEnabled: true
+    installations:
+      - name: "sonarqube-local"
+        serverUrl: "http://sonarqube:9000"
+        credentialsId: "sonar-token"
+
+  location:
+    url: "http://localhost:8080/"
+    adminAddress: "admin@local.dev"

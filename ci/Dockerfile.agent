@@ -1,0 +1,112 @@
+# =============================================================================
+# ci/Dockerfile.agent
+# OWNED BY: Linh (Team 1)
+#
+# Jenkins CI agent image with all tools pre-installed.
+# My (Team 2) uses this image to run scan scripts.
+# Build: docker build -t devsecops-agent:latest -f ci/Dockerfile.agent .
+# Push:  docker tag devsecops-agent:latest localhost:5001/devsecops-agent:latest
+#        docker push localhost:5001/devsecops-agent:latest
+#
+# Tools installed:
+#   Build:    Node.js 20, JDK 17, npm
+#   Security: Trivy, TruffleHog, Gitleaks, OWASP Dep-Check, Semgrep, Checkov, Cosign
+#   k8s:      kubectl, helm, argocd CLI
+#   Scan:     SonarQube Scanner
+# =============================================================================
+
+
+FROM ubuntu:22.04 
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Can adjust version of trivy or another tool that you want for " CONTAINER - FILE SYSTEM SCAN " PHASE. 
+ENV TRIVY_VERSION=0.50.1  
+
+# 
+ENV SONAR_SCANNER_VERSION=5.0.1.3006
+ENV DEPENDENCY_CHECK_VERSION=9.0.9
+ENV NODE_VERSION=20
+
+# ── Base tools ────────────────────────────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl wget git unzip zip ca-certificates gnupg lsb-release \
+    openjdk-17-jdk-headless python3 python3-pip jq docker.io \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# ── Node.js 20 ────────────────────────────────────────────
+RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - \
+    && apt-get install -y nodejs && apt-get clean
+
+WORKDIR /tools
+
+# ── Trivy (container + filesystem scan) ──────────────────
+RUN curl -sfL \
+    https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz \
+    | tar xz -C /usr/local/bin trivy
+
+# ── TruffleHog v3 (verified secrets) ─────────────────────
+RUN curl -sSfL \
+    https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh \
+    | sh -s -- -b /usr/local/bin
+
+# ── Gitleaks (pattern-based secrets) ─────────────────────
+RUN GITLEAKS_VER=$(curl -sf \
+    https://api.github.com/repos/zricethezav/gitleaks/releases/latest \
+    | jq -r .tag_name) && \
+    curl -sfL \
+    "https://github.com/zricethezav/gitleaks/releases/download/${GITLEAKS_VER}/gitleaks_${GITLEAKS_VER#v}_linux_x64.tar.gz" \
+    | tar xz -C /usr/local/bin gitleaks
+
+# ── OWASP Dependency-Check (SCA) ─────────────────────────
+RUN curl -sfL \
+    "https://github.com/jeremylong/DependencyCheck/releases/download/v${DEPENDENCY_CHECK_VERSION}/dependency-check-${DEPENDENCY_CHECK_VERSION}-release.zip" \
+    -o /tmp/dc.zip \
+    && unzip -q /tmp/dc.zip -d /opt \
+    && ln -s /opt/dependency-check/bin/dependency-check.sh /usr/local/bin/dependency-check.sh \
+    && rm /tmp/dc.zip
+
+# ── SonarQube Scanner (SAST) ─────────────────────────────
+RUN curl -sfL \
+    "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SONAR_SCANNER_VERSION}-linux.zip" \
+    -o /tmp/sonar.zip \
+    && unzip -q /tmp/sonar.zip -d /opt \
+    && mv /opt/sonar-scanner-${SONAR_SCANNER_VERSION}-linux /opt/sonar-scanner \
+    && ln -s /opt/sonar-scanner/bin/sonar-scanner /usr/local/bin/sonar-scanner \
+    && rm /tmp/sonar.zip
+
+# ── Semgrep (additional SAST) ─────────────────────────────
+RUN pip3 install --no-cache-dir semgrep
+
+# ── Checkov (IaC scan) ────────────────────────────────────
+RUN pip3 install --no-cache-dir checkov
+
+# ── Cosign (image signing) ────────────────────────────────
+RUN curl -sfL \
+    "https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64" \
+    -o /usr/local/bin/cosign && chmod +x /usr/local/bin/cosign
+
+# ── kubectl ───────────────────────────────────────────────
+RUN KUBECTL_VER=$(curl -sf https://dl.k8s.io/release/stable.txt) && \
+    curl -sfL "https://dl.k8s.io/release/${KUBECTL_VER}/bin/linux/amd64/kubectl" \
+    -o /usr/local/bin/kubectl && chmod +x /usr/local/bin/kubectl
+
+# ── Helm ──────────────────────────────────────────────────
+RUN curl -sfL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+# ── Smoke test ────────────────────────────────────────────
+RUN echo "=== Tool versions ===" \
+    && node --version \
+    && npm --version \
+    && trivy --version \
+    && trufflehog --version \
+    && gitleaks version \
+    && sonar-scanner --version \
+    && checkov --version \
+    && cosign version \
+    && kubectl version --client \
+    && helm version \
+    && echo "=== All tools OK ==="
+
+ENTRYPOINT ["/bin/bash"]
+
