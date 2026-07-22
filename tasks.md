@@ -1,28 +1,28 @@
-Xây dựng hệ thống CI/CD DevSecOps trên AWS cho ứng dụng Web React, sử dụng Jenkins, Docker, Amazon ECR, Amazon EKS, Argo CD và CloudWatch.
+Xây dựng hệ thống CI/CD DevSecOps trên AWS cho ứng dụng Web React, sử dụng Jenkins, Docker, Amazon ECR, Amazon ECS Fargate, Amazon S3, AWS Lambda, Argo CD và CloudWatch.
 
 ## Tóm tắt
 
 | Nhiệm vụ | Vai trò chính | Trọng tâm |
 |---|---|---|
-| 1 | AWS Infrastructure và Kubernetes Platform | AWS account, IAM, EKS, networking, ECR, nền tảng triển khai |
-| 2 | CI/CD và GitOps | Jenkinsfile, pipeline, push image, Argo CD, promotion staging/production |
-| 3 | DevSecOps Security | Secrets scan, SCA, SAST, IaC scan, container scan, DAST, policy bảo mật |
-| 4 | Application, Docker và Kubernetes Manifests | React app, Dockerfile, health check, Kubernetes base/overlays |
-| 5 | Observability, QA, Documentation và Demo | CloudWatch, kiểm thử, demo script và báo cáo theo hướng dẫn tại mục NỘI QUY trên web |
+| 1 | AWS Infrastructure & Platform | AWS account, IAM, ECR, **ECS Fargate** (thay EKS), **S3** (reports), networking |
+| 2 | CI/CD và GitOps | Jenkinsfile, pipeline, push image ECR, deploy ECS Fargate, Argo CD (local), promotion |
+| 3 | DevSecOps Security | Secrets scan, SCA, SAST, IaC scan, container scan, DAST, **S3 lưu reports**, **Lambda aggregator** |
+| 4 | Application, Docker, K8s & ECS Task | React app, Dockerfile, health check, K8s base/overlays, ECS Task Definition |
+| 5 | Observability, QA, Documentation và Demo | CloudWatch, Prometheus/Grafana, kiểm thử, demo script và báo cáo |
 
 pipeline end-to-end:
 
 ```text
-React app -> Docker image -> Jenkins security gates -> Amazon ECR -> Argo CD -> Amazon EKS -> CloudWatch
+React app -> Jenkins security gates -> Amazon ECR -> ECS Fargate (Staging) -> scan reports -> Amazon S3 -> AWS Lambda (aggregator) -> ECS Fargate (Production) -> CloudWatch
 ```
 
 ### Chủ đề 3 blog posts có thể xem xét
 
 | Blog | Người phụ trách chính | Chủ đề |
 |---|---|---|
-| Blog 1 | Thành viên 1 + Thành viên 2 | Xây dựng CI/CD pipeline với Jenkins, Amazon ECR và Amazon EKS |
-| Blog 2 | Thành viên 3 | Tích hợp DevSecOps security gates: secrets, SCA, SAST, IaC, container scan |
-| Blog 3 | Thành viên 4 + Thành viên 5 | Monitoring và tối ưu chi phí cho ứng dụng Kubernetes trên AWS với CloudWatch |
+| Blog 1 | Thành viên 1 + Thành viên 2 | Xây dựng CI/CD pipeline với Jenkins, Amazon ECR và Amazon ECS Fargate (thay EKS) |
+| Blog 2 | Thành viên 3 | Tích hợp DevSecOps: secrets, SCA, SAST, container scan + lưu reports lên S3 + Lambda aggregator |
+| Blog 3 | Thành viên 4 + Thành viên 5 | Deploy container lên ECS Fargate và giám sát với CloudWatch + Prometheus/Grafana |
 
 Mỗi blog cần có:
 
@@ -77,10 +77,10 @@ Thành viên 1 chịu trách nhiệm xây dựng nền tảng AWS để ứng d�
 | File/thư mục | Công việc |
 |---|---|
 | `infrastructure/k3d/cluster.yaml` | Chuẩn hóa local Kubernetes để demo offline. |
-| `infrastructure/terraform/` nếu tạo thêm | Viết IaC cho VPC, EKS, ECR nếu nhóm chọn Terraform. |
+| `infrastructure/terraform/` nếu tạo thêm | Viết IaC cho VPC, ECS Cluster, ECR, S3 nếu nhóm chọn Terraform. |
 | `kubernetes/overlays/production/kustomization.yaml` | Phối hợp cập nhật ECR URI production. |
 | `README.md` hoặc tài liệu phụ | Ghi hướng dẫn tạo AWS foundation. |
-| AWS Console/AWS CLI | Tạo ECR, EKS, IAM, Load Balancer Controller, budget. |
+| AWS Console/AWS CLI | Tạo ECR, ECS Fargate, S3, IAM, budget. |
 
 ### Nhiệm vụ chi tiết
 
@@ -103,7 +103,7 @@ Kết quả bàn giao:
 Tiêu chí hoàn thành:
 
 - Không dùng root user để thao tác hằng ngày.
-- Có budget/cảnh báo chi phí trước khi tạo EKS.
+- Có budget/cảnh báo chi phí trước khi tạo bất kỳ resource AWS nào.
 
 #### AWS-02 - Tạo Amazon ECR
 
@@ -119,45 +119,47 @@ Tiêu chí hoàn thành:
 - Có thể login Docker vào ECR.
 - Thành viên 2 có thể push image từ Jenkins hoặc local test.
 
-#### AWS-03 - Tạo EKS cluster
+#### AWS-03 - Tạo Amazon ECS Fargate Cluster (thay EKS)
+
+Lý do thay: EKS control plane tốn ~$72/tháng, không phù hợp ngân sách sinh viên. ECS Fargate không có phí cluster, chỉ trả tiền khi task đang chạy.
 
 Việc cần làm:
+- Tạo ECS Cluster với Fargate capacity provider.
+- Tạo 2 ECS Services: `tetris-staging` và `tetris-production`.
+- Cấu hình Application Load Balancer (ALB) cho từng environment.
+- Tắt service khi không demo để tiết kiệm chi phí:
 
-- Tạo EKS cluster cho đồ án.
-- Dùng managed node group để đơn giản vận hành.
-- Chọn instance type tiết kiệm chi phí, ví dụ `t3.small`.
-- Cập nhật kubeconfig để `kubectl` truy cập được cluster.
+```bash
+# Scale về 0 ngay sau khi demo xong
+aws ecs update-service --cluster devsecops-factory \
+  --service tetris-staging --desired-count 0
+```
 
 Kết quả bàn giao:
-
-- Tên cluster.
-- Region.
-- Ảnh chụp `kubectl get nodes`.
-- Ghi chú cách cleanup cluster.
+- Tên ECS Cluster.
+- ALB URL staging và production.
+- Ghi chú cách scale to 0 khi không demo.
 
 Tiêu chí hoàn thành:
+- ECS Cluster tồn tại ở trạng thái `ACTIVE`.
+- ALB trả về response khi task đang chạy.
+- Thành viên 2 và 4 deploy được qua ECS.
 
-- `kubectl get nodes` trả về node ở trạng thái `Ready`.
-- Thành viên 2 có thể cài Argo CD.
-- Thành viên 4 có thể deploy manifest thử lên namespace staging.
-
-#### AWS-04 - Cài AWS load balancer controller
+#### AWS-04 - Tạo Amazon S3 Bucket lưu Security Reports (dịch vụ mới)
 
 Việc cần làm:
-
-- Bật OIDC provider cho EKS.
-- Tạo IAM role/service account cho AWS Load Balancer Controller.
-- Cài controller bằng Helm.
-- Kiểm tra controller chạy trong namespace `kube-system`.
+- Tạo S3 bucket lưu kết quả scan tập trung thay vì chỉ lưu trong Jenkins.
+- Cấu hình các prefix: `reports/secrets/`, `reports/sca/`, `reports/sast/`, `reports/container/`, `reports/dast/`.
+- Bật versioning và server-side encryption (SSE-S3).
+- Bật lifecycle policy tự xóa reports sau 30 ngày.
 
 Kết quả bàn giao:
-
-- Ảnh chụp controller running.
-- Hướng dẫn annotation cần dùng cho Ingress ALB.
+- Tên S3 bucket và prefix structure.
+- Ảnh chụp bucket settings.
 
 Tiêu chí hoàn thành:
-
-- Khi apply Ingress class `alb`, AWS tự tạo Application Load Balancer.
+- Thành viên 3 có thể upload report từ Jenkins bằng `aws s3 cp`.
+- Thành viên 3 deploy được Lambda đọc từ bucket này.
 
 #### AWS-05 - Chuẩn hóa local k3d
 
@@ -182,8 +184,9 @@ Kết quả bàn giao:
 
 | Cần từ ai | Nội dung |
 |---|---|
-| Thành viên 2 | Cần biết Jenkins chạy local hay trên AWS để cấp quyền phù hợp. |
-| Thành viên 4 | Cần biết port, health check, resource requests/limits của app. |
+| Thành viên 2 | Cần biết Jenkins cần quyền AWS gì để push ECR và deploy ECS. |
+| Thành viên 3 | Cần biết cấu trúc S3 prefix và Lambda đọc report từ đâu. |
+| Thành viên 4 | Cần biết port, health check, CPU/memory của app cho ECS task definition. |
 | Thành viên 5 | Cần phối hợp CloudWatch, cost screenshot và phần báo cáo AWS foundation. |
 
 ### Checklist hoàn thành
@@ -191,9 +194,9 @@ Kết quả bàn giao:
 - [ ] AWS Budget đã tạo.
 - [ ] IAM access không dùng root user.
 - [ ] ECR repository đã tạo.
-- [ ] EKS cluster chạy được.
-- [ ] AWS Load Balancer Controller hoạt động.
-- [ ] Có hướng dẫn cleanup AWS.
+- [ ] ECS Fargate Cluster tạo thành công (staging + production services).
+- [ ] S3 bucket tạo thành công, có đủ prefix cho từng loại scan.
+- [ ] Có hướng dẫn cleanup AWS (scale ECS về 0 ngay sau demo).
 - [ ] Có ảnh chụp minh chứng cho báo cáo.
 
 ## Task 2 - CI/CD và GitOps
@@ -354,7 +357,7 @@ Tiêu chí hoàn thành:
 
 | Cần từ ai | Nội dung |
 |---|---|
-| Thành viên 1 | ECR URI, EKS kubeconfig, Argo CD endpoint, AWS permission. |
+| Thành viên 1 | ECR URI, AWS permission, thông tin kết nối ECS Fargate. |
 | Thành viên 3 | Scripts scan và quy định fail/pass. |
 | Thành viên 4 | Dockerfile, app port, Kubernetes overlays. |
 | Thành viên 5 | Demo script, screenshot pipeline, tổng hợp kết quả. |
@@ -519,7 +522,7 @@ Tiêu chí hoàn thành:
 Hiện trạng:
 
 - `ci/stages/dast-scan.sh` đang tìm container `staging-app-local` và port 3000.
-- Cách này không phù hợp khi deploy lên Kubernetes/EKS.
+- Cách này không phù hợp khi deploy lên môi trường phân tán như ECS Fargate.
 
 Việc cần làm:
 
@@ -556,11 +559,25 @@ Tiêu chí hoàn thành:
 
 | Cần từ ai | Nội dung |
 |---|---|
-| Thành viên 2 | Jenkins stage gọi đúng script và archive report. |
+| Thành viên 2 | Jenkins stage gọi đúng script và archive report (push lên S3). |
 | Thành viên 4 | App có endpoint ổn định để DAST scan. |
 | Thành viên 5 | Tổng hợp findings vào báo cáo và slide. |
 
-### Xhecklist hoàn thành
+#### SEC-07 - AWS Lambda Aggregator xử lý Security Reports (dịch vụ mới)
+
+Việc cần làm:
+- Viết một script (Python/Node.js) chạy trên AWS Lambda.
+- Cấu hình Lambda trigger khi có file mới upload lên S3 bucket (được tạo ở Task 1).
+- Chức năng: Đọc nội dung report (JSON), parse lỗi High/Critical, và có thể ghi log ra CloudWatch hoặc gọi webhook báo cho nhóm.
+
+Kết quả bàn giao:
+- Source code Lambda function.
+- Ảnh chụp Lambda được trigger thành công trên AWS Console.
+
+Tiêu chí hoàn thành:
+- Khi đẩy file lên S3, Lambda tự động chạy và ghi log.
+
+### Checklist hoàn thành
 
 - [ ] Secrets scan hoạt động.
 - [ ] SCA scan có report.
@@ -568,14 +585,15 @@ Tiêu chí hoàn thành:
 - [ ] IaC scan dùng đúng đường dẫn.
 - [ ] Container scan có JSON report.
 - [ ] DAST scan staging URL.
+- [ ] **AWS Lambda** tự động xử lý report từ **S3**.
 - [ ] Có bảng security findings cho báo cáo.
 - [ ] Có đề xuất remediation.
 
-## Task4 - Application, Docker và Kubernetes Manifests
+## Task 4 - Application, Docker, Kubernetes Manifests và ECS Task Definition
 
 ### Mô tả
 
-Thành viên 4 chịu trách nhiệm đảm bảo ứng dụng có thể build, container hóa và chạy ổn định trên Kubernetes. Đây là phần nối giữa code ứng dụng và hạ tầng deploy.
+Thành viên 4 chịu trách nhiệm đảm bảo ứng dụng có thể build, container hóa và chạy ổn định trên Kubernetes (local) và ECS Fargate (cloud). Đây là phần nối giữa code ứng dụng và hạ tầng deploy.
 
 ### File/thư mục phụ trách
 
@@ -736,11 +754,28 @@ Kết quả bàn giao:
 - Thành viên 5 có nội dung để đưa vào báo cáo.
 - Thành viên 3 có thông tin để giải thích security findings.
 
+#### APP-07 - Khởi tạo ECS Task Definition (dịch vụ mới)
+
+Việc cần làm:
+
+- Viết file `ecs-task-def.json` định nghĩa container.
+- Cấu hình ECR image URI, port mapping 8080, log configuration `awslogs`.
+- Khai báo task execution role và task role.
+
+Kết quả bàn giao:
+
+- File `ecs-task-def.json` commit vào repo.
+- Đã test deploy thử nghiệm lên ECS.
+
+Tiêu chí hoàn thành:
+
+- ECS Fargate có thể pull image và chạy task thành công.
+
 ### Phối hợp
 
 | Cần từ ai | Nội dung |
 |---|---|
-| Thành viên 1 | EKS cluster, ECR URI, ALB setup. |
+| Thành viên 1 | ECS Fargate cluster, ECR URI, ALB setup. |
 | Thành viên 2 | Jenkins build path và image tag convention. |
 | Thành viên 3 | Security findings liên quan app/container. |
 | Thành viên 5 | Test case và tài liệu demo app. |
@@ -753,6 +788,7 @@ Kết quả bàn giao:
 - [ ] Staging overlay deploy được.
 - [ ] Production overlay deploy được.
 - [ ] Container port, Service targetPort, probes khớp nhau.
+- [ ] ECS Task Definition (`ecs-task-def.json`) đã được tạo.
 - [ ] App documentation được cập nhật.
 
 ## Task5 - Observability, QA, Documentation và Demo
@@ -774,27 +810,27 @@ Thành viên 5 chịu trách nhiệm chứng minh hệ thống hoạt động đ
 
 ### Chi tiết
 
-#### OBS-01 - Bật CloudWatch Container Insights
+#### OBS-01 - Bật CloudWatch Container Insights cho ECS
 
 Việc cần làm:
 
-- Phối hợp với Thành viên 1 để bật CloudWatch Observability add-on cho EKS.
+- Phối hợp với Thành viên 1 để bật CloudWatch Container Insights cho ECS cluster.
 - Kiểm tra logs/metrics xuất hiện trong CloudWatch.
 - Chụp màn hình dashboard/log groups.
 
 Kiểm tra:
 
 ```bash
-aws eks describe-addon \
-  --cluster-name devsecops-factory \
-  --addon-name amazon-cloudwatch-observability \
+aws ecs update-cluster-settings \
+  --cluster devsecops-factory \
+  --settings name=containerInsights,value=enabled \
   --region ap-southeast-1
 ```
 
 Kết quả bàn giao:
 
 - Ảnh chụp Container Insights.
-- Ảnh chụp log group liên quan EKS/app.
+- Ảnh chụp log group liên quan ECS/app.
 
 Tiêu chí hoàn thành:
 
@@ -810,7 +846,7 @@ Việc cần làm:
   - Security scan fail/pass.
   - ECR push.
   - Argo CD sync.
-  - EKS deploy.
+  - ECS deploy.
   - CloudWatch logs.
   - Production approval.
 - Mỗi test case cần có:
@@ -974,7 +1010,7 @@ Kết quả bàn giao:
 
 | Cần từ ai | Nội dung |
 |---|---|
-| Thành viên 1 | AWS screenshots, cost, EKS, ECR, CloudWatch. |
+| Thành viên 1 | AWS screenshots, cost, ECS Fargate, S3, ECR, CloudWatch. |
 | Thành viên 2 | Jenkins logs, Argo CD screenshots. |
 | Thành viên 3 | Security reports và findings. |
 | Thành viên 4 | App screenshot, Docker/Kubernetes manifest explanation. |
@@ -1002,7 +1038,7 @@ Kết quả bàn giao:
 
 | Thành viên | Việc cần làm | Kết quả |
 |---|---|---|
-| Thành viên 1 | Tìm hiểu AWS account, IAM, Budget, EKS/ECR. | Ghi chú AWS foundation và cost risk. |
+| Thành viên 1 | Tìm hiểu AWS account, IAM, Budget, ECS Fargate/ECR/S3. | Ghi chú AWS foundation và cost risk. |
 | Thành viên 2 | Đọc Jenkinsfile, vẽ luồng pipeline hiện tại. | Sơ đồ pipeline hiện trạng. |
 | Thành viên 3 | Đọc các script security scan. | Bảng script nào đã có, script nào thiếu. |
 | Thành viên 4 | Chạy thử app React và Dockerfile. | Kết quả build/run local. |
@@ -1038,15 +1074,15 @@ Kết quả bàn giao:
 | Thành viên 4 | Cập nhật image name trong overlays. | Kustomize dùng ECR URI đúng. |
 | Thành viên 5 | Chụp ảnh ECR và cập nhật báo cáo. | Minh chứng image registry. |
 
-### Tuần 5 - EKS và Kubernetes deploy
+### Tuần 5 - ECS Fargate và K8s local deploy
 
 | Thành viên | Việc cần làm | Kết quả |
 |---|---|---|
-| Thành viên 1 | Tạo EKS cluster và Load Balancer Controller. | EKS nodes ready, ALB controller running. |
-| Thành viên 2 | Chuẩn bị Argo CD install. | Argo CD chạy trên EKS. |
-| Thành viên 3 | IaC scan Kubernetes manifests. | Checkov report. |
-| Thành viên 4 | Deploy staging overlay lên EKS. | App chạy trên staging namespace. |
-| Thành viên 5 | Ghi test case deploy EKS. | Screenshot pods/services/ingress. |
+| Thành viên 1 | Tạo ECS Fargate Cluster và S3 Bucket. | ECS Cluster active, S3 created. |
+| Thành viên 2 | Chuẩn bị Argo CD (local k3d) & Jenkins deploy ECS. | Argo CD chạy local, Jenkins deploy ECS. |
+| Thành viên 3 | IaC scan manifests & test Lambda aggregator. | Checkov report, Lambda code. |
+| Thành viên 4 | Deploy staging lên ECS Fargate. | App chạy trên ECS staging. |
+| Thành viên 5 | Ghi test case deploy ECS Fargate. | Screenshot ECS tasks/services/ALB. |
 
 ### Tuần 6 - GitOps staging và production
 
@@ -1072,40 +1108,40 @@ Kết quả bàn giao:
 
 | Thành viên | Việc cần làm | Kết quả |
 |---|---|---|
-| Thành viên 1 | Chuẩn bị phần trình bày AWS/EKS/ECR. | Slide AWS foundation. |
+| Thành viên 1 | Chuẩn bị phần trình bày AWS (ECS Fargate, S3, IAM). | Slide AWS foundation. |
 | Thành viên 2 | Chuẩn bị phần trình bày Jenkins/GitOps. | Slide CI/CD flow. |
-| Thành viên 3 | Chuẩn bị phần trình bày DevSecOps. | Slide security gates. |
-| Thành viên 4 | Chuẩn bị phần trình bày app/K8s. | Slide app deployment. |
+| Thành viên 3 | Chuẩn bị phần trình bày DevSecOps (Lambda Aggregator). | Slide security gates & Lambda. |
+| Thành viên 4 | Chuẩn bị phần trình bày app/ECS. | Slide app deployment. |
 | Thành viên 5 | Ghép slide kỹ thuật, chạy rehearsal kỹ thuật. | Demo kỹ thuật ổn định. |
 
 ### Tuần 9 - Dựng workshop website và nội dung song ngữ
 
 | Thành viên | Việc cần làm | Kết quả |
 |---|---|---|
-| Thành viên 1 | Viết phần AWS foundation bằng tiếng Việt: IAM, Budget, ECR, EKS, cleanup. | Nội dung AWS foundation bản `vi`. |
+| Thành viên 1 | Viết phần AWS foundation bằng tiếng Việt: IAM, Budget, ECR, ECS Fargate, S3, cleanup. | Nội dung AWS foundation bản `vi`. |
 | Thành viên 2 | Viết phần CI/CD và GitOps bằng tiếng Việt. | Nội dung Jenkins/Argo CD bản `vi`. |
-| Thành viên 3 | Viết phần DevSecOps security gates bằng tiếng Việt. | Nội dung security bản `vi`. |
-| Thành viên 4 | Viết phần app, Docker, Kubernetes manifests bằng tiếng Việt. | Nội dung app/K8s bản `vi`. |
+| Thành viên 3 | Viết phần DevSecOps (bao gồm Lambda) bằng tiếng Việt. | Nội dung security bản `vi`. |
+| Thành viên 4 | Viết phần app, Docker, ECS task definition bằng tiếng Việt. | Nội dung app/ECS bản `vi`. |
 | Thành viên 5 | Tạo workshop website từ template FCAJ, tạo navigation, bắt đầu bản dịch `en`. | Website có khung `vi/en`. |
 
 ### Tuần 10 - Hoàn thiện workshop step-by-step
 
 | Thành viên | Việc cần làm | Kết quả |
 |---|---|---|
-| Thành viên 1 | Chụp screenshot AWS Console/CLI: Budget, ECR, EKS, ALB, CloudWatch. | Bộ ảnh minh chứng AWS. |
-| Thành viên 2 | Chụp screenshot Jenkins pipeline và Argo CD sync. | Bộ ảnh CI/CD và GitOps. |
-| Thành viên 3 | Chụp screenshot/report security scans. | Bộ ảnh security findings. |
-| Thành viên 4 | Chụp screenshot app, Docker build, Kubernetes workloads. | Bộ ảnh app/deployment. |
+| Thành viên 1 | Chụp screenshot AWS Console/CLI: Budget, ECR, ECS Fargate, S3, ALB, CloudWatch. | Bộ ảnh minh chứng AWS. |
+| Thành viên 2 | Chụp screenshot Jenkins pipeline và Argo CD sync (local). | Bộ ảnh CI/CD và GitOps. |
+| Thành viên 3 | Chụp screenshot/report security scans và Lambda execution. | Bộ ảnh security findings. |
+| Thành viên 4 | Chụp screenshot app, Docker build, ECS workloads. | Bộ ảnh app/deployment. |
 | Thành viên 5 | Viết workshop lab từng bước, thêm code snippet, ảnh và kết quả mong đợi. | Workshop có thể làm theo end-to-end. |
 
 ### Tuần 11 - Blogs, events, self-evaluation và feedback
 
 | Thành viên | Việc cần làm | Kết quả |
 |---|---|---|
-| Thành viên 1 | Viết/review Blog 1 về AWS foundation, ECR/EKS. | Nội dung blog có phần AWS. |
+| Thành viên 1 | Viết/review Blog 1 về AWS foundation, ECR/ECS Fargate/S3. | Nội dung blog có phần AWS. |
 | Thành viên 2 | Viết/review Blog 1 về Jenkins CI/CD và GitOps. | Blog 1 hoàn chỉnh. |
-| Thành viên 3 | Viết Blog 2 về DevSecOps security gates. | Blog 2 hoàn chỉnh. |
-| Thành viên 4 | Viết/review Blog 3 về Docker/Kubernetes deployment. | Nội dung blog có phần app/K8s. |
+| Thành viên 3 | Viết Blog 2 về DevSecOps security gates & Lambda aggregator. | Blog 2 hoàn chỉnh. |
+| Thành viên 4 | Viết/review Blog 3 về Docker/ECS deployment. | Nội dung blog có phần app/ECS. |
 | Thành viên 5 | Viết/review Blog 3 về CloudWatch/cost, thu thập events, self-evaluation, feedback. | 3 blog posts, events và self-evaluation sẵn sàng. |
 
 ### Tuần 12 - Rà soát thang điểm và nộp bản cuối
@@ -1115,7 +1151,7 @@ Kết quả bàn giao:
 | Thành viên 1 | Kiểm tra cleanup AWS, xác nhận không còn resource tốn phí ngoài kế hoạch. | Cleanup checklist hoàn chỉnh. |
 | Thành viên 2 | Chạy lại pipeline hoặc chuẩn bị log thành công cuối cùng. | Bằng chứng CI/CD cuối cùng. |
 | Thành viên 3 | Chốt bảng findings và remediation. | Security section hoàn chỉnh. |
-| Thành viên 4 | Chốt app/deployment screenshots, kiểm tra file đính kèm. | App/K8s section hoàn chỉnh. |
+| Thành viên 4 | Chốt app/deployment screenshots, kiểm tra file đính kèm. | App/ECS section hoàn chỉnh. |
 | Thành viên 5 | Rà soát song ngữ, template, navigation, lỗi chính tả, rehearsal cuối. | Workshop website và slide sẵn sàng nộp. |
 
 ## Checklist tích hợp cuối cùng
@@ -1124,8 +1160,8 @@ Trước ngày nộp, cả nhóm phải cùng kiểm tra:
 
 - [ ] AWS Budget đã bật.
 - [ ] ECR có image mới.
-- [ ] EKS cluster nodes `Ready`.
-- [ ] AWS Load Balancer Controller chạy được.
+- [ ] ECS Fargate cluster active và chạy đúng 2 services (staging, production).
+- [ ] S3 Bucket nhận file report và kích hoạt Lambda thành công.
 - [ ] Jenkins pipeline chạy end-to-end.
 - [ ] Secrets scan hoạt động.
 - [ ] SCA scan hoạt động.
