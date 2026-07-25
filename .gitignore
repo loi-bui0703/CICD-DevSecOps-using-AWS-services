@@ -52,3 +52,6 @@ Thumbs.db
 # ── Logs ─────────────────────────────────────────────────
 *.log
 logs/
+
+docs/cicd-gitops.md
+results/

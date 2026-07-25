@@ -1,317 +1,792 @@
-// ====================================================
-// Jenkins File - DevSecOps Full Pipeline
-// ====================================================
-// 11-stage pipeline:
-// 1. Checkout source from GitHub 
-// 2. Prepare metadata (Git commit tag, build number) 
-// 3. Secrets scan (Gitleaks) 
-// 4. SCA scan (Trivy)
-// 5. SAST scan (SonarQube) 
-// 6. IaC scan (Checkov )  
-// 7. Build Docker image 
-// 8. Container scan (Trivy) 
-// 9. Push image to Local Registry (change to ECR if deploy to Cloud)
-// 10. Summary and accept from administrator of Project
-// 11. Deploy via GitOps(ArgoCD)
-// ====================================================
+// DevSecOps pipeline for the repository that contains this Jenkinsfile.
+// Cloud and GitOps integrations are opt-in so local development remains usable
+// while the AWS and security contracts are being completed by other members.
 
-def     IMAGE_TAG = ""
-def     IMAGE_URI = ""
-def     GIT_COMMIT_SHORT = ""
-def     STAGING_URL = "http://tetris-staging.example.com:30080"
-def     PROD_URL = "http://tetris.example.com:30080"
+def runSecurityScript(Map config) {
+  String scriptPath = config.script as String
+  String displayName = config.name as String
+  List<String> expectedReports = (config.expectedReports ?: []) as List<String>
+  List<String> scanEnvironment = (config.environment ?: []) as List<String>
 
-pipeline {
-  agent any
-  parameters {
-        string(name: 'TARGET_REPO', defaultValue: 'https://github.com/lamelihuynh/tetris-app.git', description: 'GitHub URL of project to scan')
-        string(name: 'TARGET_BRANCH', defaultValue: 'main', description: 'Branch to checkout')
+  if (params.SECURITY_MODE == 'stub') {
+    echo "[STUB] ${displayName} is disabled by SECURITY_MODE=stub."
+    return
   }
 
-  environment{
-    REGISTRY = "localhost:5001"
-    REPO_NAME = "devsecops/tetris"
-    IMAGE_NAME = "${REGISTRY}/${REPO_NAME}"
-    SONAR_HOST = "http://sonarqube:9000" 
-    TARGET_DIR = "${WORKSPACE}/target-repo"
-    SCAN_REPORT_DIR = "${WORKSPACE}/scan-reports"
-    KUBECONFIG = "/home/jenkins/.kube/config"
+  boolean scriptReady = fileExists(scriptPath) &&
+    sh(script: "test -s '${scriptPath}'", returnStatus: true) == 0
+
+  if (!scriptReady) {
+    String message = "${displayName} integration is not ready: ${scriptPath} is missing or empty."
+    if (params.SECURITY_MODE == 'enforce') {
+      error(message)
+    }
+    unstable(message)
+    return
   }
 
-
-  options{
-    timeout(time: 2, unit: 'HOURS')
-    disableConcurrentBuilds()
-    buildDiscarder(logRotator(numToKeepStr: '10'))
-  }
-
-  stages{
-    stage('1. Checkout Target Repo') {
-            steps {
-                script {
-                    echo "==== CHECKING OUT TARGET PROJECT ===="
-                    dir('target-repo') {
-                        def scmVars = checkout([
-                            $class: 'GitSCM', 
-                            branches: [[name: "*/${params.TARGET_BRANCH}"]], 
-                            userRemoteConfigs: [[ url: "${params.TARGET_REPO}" ]]
-                        ])
-                        
-                        if (scmVars && scmVars.GIT_COMMIT) {
-                            env.GIT_COMMIT_SHORT = scmVars.GIT_COMMIT.substring(0, 7)
-                        } else {
-                            env.GIT_COMMIT_SHORT = "build-${env.BUILD_NUMBER}"
-                        }
-                    }
-                }
-            }
-        }
-    
-
-
-
-    stage('2. Prepare Metadata'){
-      steps{
-        script{
-          sh "mkdir -p ${env.SCAN_REPORT_DIR}"
-          env.IMAGE_TAG = env.GIT_COMMIT_SHORT
-          env.IMAGE_URI = "${env.IMAGE_NAME}:${env.IMAGE_TAG}"
-          echo "Image TAG: ${env.IMAGE_TAG}"
-          echo "Image URI: ${env.IMAGE_URI}"
-          echo "Report directory: ${env.SCAN_REPORT_DIR}" 
-        }
-      }
-    }
-
-    stage('3. Secrets Scan'){
-      when {
-        expression { fileExists('app/src')} 
-      }
-      steps {
-        script{
-          echo ' ===== Running secrets scan (Gitleaks).... ==== ' 
-          def scanStatus = sh (
-            script: '''
-
-              if ! command -v gitleaks &> /dev/null; then
-                echo [-] Gitleaks has not installed. The process will installe automated...
-                curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.18.2/gitleaks_8.18.2_linux_x64.tar.gz | tar -xz 
-                chmod +x gitleaks
-                export PATH=$PATH:$(pwd)
-              fi
-              ./gitleaks protect detect --source . --report-path ${SCAN_REPORT_DIR}/gitleaks-report.json --report-format json
-
-            ''',
-            returnStatus: true
-          )
-
-          if (scanStatus == 1)  {
-            error("\033[31m [CRITICAL]: Hardcoded secrets detected by Gitleaks! Pipeline aborted. Please check file report for detail.")
-          }
-          else if (scanStatus != 0){
-            error("\033[33m [SYSTEM ERROR]: Cannot run Gitleaks (Exit code: ${scanStatus}). Pipeline aborted.")
-          }
-          else {
-            echo "\033[32m [PASS]: No secrets found. Code looks clean!"
-          }
-        }
-      }
-      post{
-        always{
-          archiveArtifacts artifacts: "${SCAN_REPORT_DIR}/gitleaks-report.json", allowEmptyArchive: true
-        }
-      }
-    }
-
-    stage('4. SCA Scan'){
-      when { expression { fileExists('target-repo') } }
-      steps {
-          script {
-              echo "==== Starting SCA scan with Trivy ===="
-              sh """
-                  chmod +x ci/stages/sca-scan.sh
-                  SCAN_DIR="${env.TARGET_DIR}" \
-                  SCAN_REPORT_DIR="${env.SCAN_REPORT_DIR}" \
-                  ./ci/stages/sca-scan.sh
-              """
-              echo "==== SCA scan finished ===="
-          }
-      }
-      post { 
-          always { 
-              archiveArtifacts artifacts: "scan-reports/trivy-sca-report.*", allowEmptyArchive: true 
-          } 
-      }
-    }
-
-
-    // stage('5. SAST Scan (SonarQube)') {
-    //   steps {
-    //       script {
-    //           echo "==== Starting SAST scan (Static Analysis) ===="
-    //           withEnv([
-    //               "SONAR_HOST=${env.SONAR_HOST}",
-    //               "SCAN_DIR=${env.TARGET_DIR}",
-    //               "IMAGE_TAG=${env.IMAGE_TAG}"
-    //           ]) {
-    //               withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-    //                   sh 'chmod +x ci/stages/sast-scan.sh && ./ci/stages/sast-scan.sh -Dsonar.sources=target-repo -Dsonar.scm.disabled=true' 
-    //               }
-    //           }
-    //       }
-    //   }
-    //   post {
-    //       always {
-    //         echo "SAST Scan completed. Please check SonarQube Dashboard for the report."          }
-    //   }
-    // }
-
-    stage('6. IaC Scan (Checkov)') {
-        steps {
-            script {
-                echo "==== Running Infrastructure-as-Code Scan ===="
-                sh """
-                    chmod +x ./ci/stages/iac-scan.sh
-                    ./ci/stages/iac-scan.sh .
-                """
-            }
-        }
-        post {
-            always {
-                archiveArtifacts artifacts: "checkov_report.json", allowEmptyArchive: true
-            }
-        }
-    }
-
-    stage('7. Build Docker Image'){
-      steps{
-        script {
-          echo '==== Building Docker Image ==== ' 
-          sh """
-          set -e 
-          docker build -t ${env.IMAGE_NAME}:${env.IMAGE_TAG} -t ${env.IMAGE_NAME}:latest -f ./app/Dockerfile ./app
-          echo "Build image ${env.IMAGE_NAME}:${env.IMAGE_TAG}"
-          """
-        }
-      }
-    }
-
-    stage('8. Container Scan (Trivy)') {
-        steps {
-            script {
-                echo "==== Starting Container Security Scan ===="
-                withEnv(["IMAGE_FULL_PATH=${env.IMAGE_URI}", "SCAN_REPORT_DIR=${env.SCAN_REPORT_DIR}"]) {
-                    sh 'printenv'
-                    sh 'chmod +x ./ci/stages/container-scan.sh && ./ci/stages/container-scan.sh'
-                }
-            }
-        }
-        post { 
-            always { 
-                archiveArtifacts artifacts: "scan-reports/container-scan-report.json", allowEmptyArchive: true 
-            } 
-        }
-    }
-    stage('9. Push to Local Registry'){
-      steps {
-          script{
-            echo " ==== Pushing image to local registry ===="
-            sh """
-            docker push ${env.IMAGE_NAME}:${env.IMAGE_TAG}
-            docker push ${env.IMAGE_NAME}:latest
-
-            echo "\\033[32m[Success] - Pushed to : ${env.IMAGE_NAME}:${env.IMAGE_TAG}"
-            echo "\\033[32m[Success] - Also tagged as : ${env.IMAGE_NAME}:latest"           
-            """
-          }
-        }
-
-      }
-
-    stage('10. Final Summary') {
-        steps {
-            script {
-                echo """
-                ╔══════════════════════════════════════════════════════════════════════════╗
-                ║            DEVSECOPS PIPELINE COMPLETED                                  ║
-                ╠══════════════════════════════════════════════════════════════════════════╣
-                ║ TARGET: ${params.TARGET_REPO}                                            ║
-                ║ REPORTS: ${env.SCAN_REPORT_DIR}                                          ║
-                ╚══════════════════════════════════════════════════════════════════════════╝
-                """
-            }
-        }
-    }
-  
-
-  stage('10.5. Manager Approval for Production') {
-        when {
-            expression {
-                env.GIT_BRANCH ==~ /origin\/main|main/ 
-            }
-        }
-        steps {
-            script {
-                echo "==== WAITING FOR MANAGER APPROVAL ===="
-                // Jenkins sẽ tạm dừng tại đây và hiển thị nút bấm trên giao diện
-                def userInput = input(
-                    id: 'DeployApproval',
-                    message: "Báo cáo bảo mật đã sẵn sàng. Bạn có xác nhận Push Image ${env.IMAGE_TAG} lên Production (GitOps) không?",
-                    ok: 'Xác nhận Deploy'
-                )
-                echo "Quản lý đã phê duyệt! Đang tiến hành deploy..."
-            }
-        }
-    }
-
-  stage('11. Deploy Staging (GitOps)'){
-    when {
-      expression {
-        env.GIT_BRANCH ==~ /origin\/main|main/ 
-      }
-    }
-
-    steps{
-      withCredentials([
-        string(credentialsId: 'github-token', variable: 'GIT_TOKEN')
-      ]){
-        script{
-          sh '''
-          rm -rf temp-infra-repo 
-
-          echo "Cloning Infra Repository..."
-          git clone https://${GIT_TOKEN}@github.com/lamelihuynh/tetris-infra.git temp-infra-repo
-
-          cd temp-infra-repo
-          
-          git config user.email "jenkins@localhost"
-          git config user.name "Jenkins CI"
-
-          cd kubernetes/overlays/staging
-
-          # Update version of the application 
-          echo "[*] Updating staging kustomization..."
-          kustomize edit set image tetris-devsecops=${IMAGE_URI}
-
-          cd ../../../
-          
-          git add kubernetes/overlays/staging/kustomization.yaml
-          git commit -m "Auto-deploy Staging: Update image to ${IMAGE_TAG}" || echo "No changes"
-          git push origin main || echo "Nothing to push"
-          echo "Staging kustomization updated successfully in tetris-infra"
-          echo "Waiting for ArgoCD to sync..."
-          sleep 5
-          '''
-        }
-      }
+  Closure executeScan = {
+    withEnv(scanEnvironment) {
+      sh(
+        label: displayName,
+        script: """#!/usr/bin/env bash
+set -euo pipefail
+chmod +x '${scriptPath}'
+'${scriptPath}'
+"""
+      )
     }
   }
 
+  if (params.SECURITY_MODE == 'enforce') {
+    executeScan()
+  } else {
+    catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+      executeScan()
+    }
+  }
 
+  List<String> missingReports = expectedReports.findAll { !fileExists(it) }
+  if (!missingReports.isEmpty()) {
+    String message = "${displayName} did not create expected report(s): ${missingReports.join(', ')}"
+    if (params.SECURITY_MODE == 'enforce') {
+      error(message)
+    }
+    unstable(message)
   }
 }
 
+def withAwsAuth(Closure body) {
+  List<String> regionEnvironment = [
+    "AWS_REGION=${params.AWS_REGION}",
+    "AWS_DEFAULT_REGION=${params.AWS_REGION}"
+  ]
 
+  if (params.AWS_AUTH_MODE == 'jenkins-credentials') {
+    withCredentials([
+      usernamePassword(
+        credentialsId: params.AWS_CREDENTIALS_ID,
+        usernameVariable: 'AWS_ACCESS_KEY_ID',
+        passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+      )
+    ]) {
+      withEnv(regionEnvironment) {
+        body()
+      }
+    }
+  } else {
+    withEnv(regionEnvironment) {
+      body()
+    }
+  }
+}
 
+def updateGitOpsOverlay(String targetEnvironment) {
+  String checkoutDirectory = "gitops-${targetEnvironment}"
 
+  dir(checkoutDirectory) {
+    deleteDir()
+    checkout([
+      $class: 'GitSCM',
+      branches: [[name: "*/${params.GITOPS_BRANCH}"]],
+      extensions: [
+        [$class: 'LocalBranch', localBranch: params.GITOPS_BRANCH],
+        [$class: 'CloneOption', depth: 0, noTags: false, shallow: false]
+      ],
+      userRemoteConfigs: [[
+        credentialsId: params.GIT_CREDENTIALS_ID,
+        url: params.GITOPS_REPO_URL
+      ]]
+    ])
 
+    withEnv([
+      "GITOPS_ENVIRONMENT=${targetEnvironment}",
+      "GITOPS_BRANCH=${params.GITOPS_BRANCH}"
+    ]) {
+      sh '''#!/usr/bin/env bash
+set -euo pipefail
+
+OVERLAY_DIR="kubernetes/overlays/${GITOPS_ENVIRONMENT}"
+test -f "${OVERLAY_DIR}/kustomization.yaml"
+
+cd "${OVERLAY_DIR}"
+kustomize edit set image "tetris-devsecops=${IMAGE_URI}"
+cd ../../..
+
+git config user.email "jenkins@localhost"
+git config user.name "Jenkins CI"
+git add "${OVERLAY_DIR}/kustomization.yaml"
+'''
+
+      if (sh(script: 'git diff --cached --quiet', returnStatus: true) == 0) {
+        echo "GitOps ${targetEnvironment} already points to ${env.IMAGE_URI}; no commit required."
+        return
+      }
+
+      sh '''#!/usr/bin/env bash
+set -euo pipefail
+git commit -m "chore(gitops): promote ${GITOPS_ENVIRONMENT} to ${IMAGE_TAG} [skip ci]"
+'''
+
+      withCredentials([
+        usernamePassword(
+          credentialsId: params.GIT_CREDENTIALS_ID,
+          usernameVariable: 'GIT_USERNAME',
+          passwordVariable: 'GIT_TOKEN'
+        )
+      ]) {
+        sh '''#!/usr/bin/env bash
+set +x
+set -euo pipefail
+
+# The temporary credential helper reads masked environment variables. It does
+# not write the token into the remote URL or the repository configuration.
+git -c credential.helper='!f() { echo "username=${GIT_USERNAME}"; echo "password=${GIT_TOKEN}"; }; f' \
+  push origin "HEAD:${GITOPS_BRANCH}"
+'''
+      }
+    }
+  }
+}
+
+def deployEcsService(String serviceName, String taskFamily) {
+  withEnv([
+    "ECS_SERVICE_NAME=${serviceName}",
+    "ECS_TASK_FAMILY=${taskFamily}"
+  ]) {
+    sh '''#!/usr/bin/env bash
+set -euo pipefail
+
+REPORT_DIR="${SCAN_REPORT_DIR}/ecs-${ECS_SERVICE_NAME}"
+mkdir -p "${REPORT_DIR}"
+
+aws ecs describe-task-definition \
+  --task-definition "${ECS_TASK_FAMILY}" \
+  --output json > "${REPORT_DIR}/current-task-definition.json"
+
+jq --arg container "${ECS_CONTAINER_NAME}" --arg image "${IMAGE_URI}" '
+  .taskDefinition as $task
+  | if any($task.containerDefinitions[]; .name == $container) then
+      $task
+      | .containerDefinitions |= map(
+          if .name == $container then .image = $image else . end
+        )
+      | del(
+          .taskDefinitionArn,
+          .revision,
+          .status,
+          .requiresAttributes,
+          .compatibilities,
+          .registeredAt,
+          .registeredBy,
+          .deregisteredAt
+        )
+    else
+      error("Container name not found in ECS task definition: " + $container)
+    end
+' "${REPORT_DIR}/current-task-definition.json" \
+  > "${REPORT_DIR}/next-task-definition.json"
+
+TASK_DEFINITION_ARN="$(aws ecs register-task-definition \
+  --cli-input-json "file://${REPORT_DIR}/next-task-definition.json" \
+  --query 'taskDefinition.taskDefinitionArn' \
+  --output text)"
+
+aws ecs update-service \
+  --cluster "${ECS_CLUSTER}" \
+  --service "${ECS_SERVICE_NAME}" \
+  --task-definition "${TASK_DEFINITION_ARN}" \
+  --force-new-deployment \
+  --output json > "${REPORT_DIR}/update-service.json"
+
+aws ecs wait services-stable \
+  --cluster "${ECS_CLUSTER}" \
+  --services "${ECS_SERVICE_NAME}"
+
+printf '%s\n' "${TASK_DEFINITION_ARN}" > "${REPORT_DIR}/task-definition-arn.txt"
+echo "ECS service ${ECS_SERVICE_NAME} is stable on ${IMAGE_URI}."
+'''
+  }
+}
+
+pipeline {
+  agent any
+
+  parameters {
+    choice(
+      name: 'REGISTRY_TARGET',
+      choices: ['local', 'ecr'],
+      description: 'Push to the local registry or Amazon ECR.'
+    )
+    string(
+      name: 'LOCAL_REGISTRY',
+      defaultValue: 'localhost:5001',
+      description: 'Local Docker registry host:port.'
+    )
+    string(
+      name: 'ECR_REGISTRY',
+      defaultValue: '',
+      description: 'ECR registry host, for example 123456789012.dkr.ecr.ap-southeast-1.amazonaws.com.'
+    )
+    string(
+      name: 'IMAGE_REPOSITORY',
+      defaultValue: 'devsecops/tetris',
+      description: 'Repository path inside the selected registry.'
+    )
+    string(name: 'AWS_REGION', defaultValue: 'ap-southeast-1', description: 'AWS region.')
+    choice(
+      name: 'AWS_AUTH_MODE',
+      choices: ['default-chain', 'jenkins-credentials'],
+      description: 'Use an IAM role/environment provider chain or a Jenkins username/password credential.'
+    )
+    string(
+      name: 'AWS_CREDENTIALS_ID',
+      defaultValue: 'aws-credentials',
+      description: 'Jenkins credential ID: username is access key ID, password is secret access key.'
+    )
+
+    choice(
+      name: 'SECURITY_MODE',
+      choices: ['stub', 'report-only', 'enforce'],
+      description: 'stub skips scanners; report-only continues as UNSTABLE; enforce blocks on scanner/report failure.'
+    )
+    booleanParam(name: 'ENABLE_SAST', defaultValue: false, description: 'Run SonarQube SAST when its service and token are ready.')
+    string(name: 'SONAR_HOST_URL', defaultValue: 'http://sonarqube:9000', description: 'SonarQube URL visible from Jenkins.')
+    booleanParam(name: 'ENABLE_DAST', defaultValue: false, description: 'Run DAST after staging deployment.')
+    string(name: 'STAGING_URL', defaultValue: '', description: 'URL consumed by the DAST script, including scheme.')
+    booleanParam(name: 'ENABLE_S3_UPLOAD', defaultValue: false, description: 'Upload available security reports to S3.')
+    string(name: 'SECURITY_REPORT_BUCKET', defaultValue: '', description: 'S3 bucket name supplied by Task 1.')
+
+    booleanParam(name: 'ENABLE_GITOPS_UPDATE', defaultValue: false, description: 'Commit the immutable image tag to staging/production overlays.')
+    string(
+      name: 'GITOPS_REPO_URL',
+      defaultValue: 'https://github.com/loi-bui0703/FCAJ-final-project.git',
+      description: 'Repository containing kubernetes/overlays.'
+    )
+    string(name: 'GITOPS_BRANCH', defaultValue: 'main', description: 'Branch watched by Argo CD.')
+    string(name: 'GIT_CREDENTIALS_ID', defaultValue: 'github-token', description: 'Jenkins username/password credential used to push GitOps commits.')
+    string(name: 'RELEASE_BRANCH', defaultValue: 'main', description: 'Only this source branch can update staging or production.')
+
+    booleanParam(name: 'ENABLE_ECS_DEPLOY', defaultValue: false, description: 'Register a task definition revision and update ECS services.')
+    string(name: 'ECS_CLUSTER', defaultValue: 'devsecops-factory', description: 'ECS cluster name from Task 1.')
+    string(name: 'ECS_STAGING_SERVICE', defaultValue: 'tetris-staging', description: 'ECS staging service name.')
+    string(name: 'ECS_STAGING_TASK_FAMILY', defaultValue: 'tetris-staging', description: 'Current ECS staging task definition family.')
+    string(name: 'ECS_PRODUCTION_SERVICE', defaultValue: 'tetris-production', description: 'ECS production service name.')
+    string(name: 'ECS_PRODUCTION_TASK_FAMILY', defaultValue: 'tetris-production', description: 'Current ECS production task definition family.')
+    string(name: 'ECS_CONTAINER_NAME', defaultValue: 'tetris', description: 'Container name to replace in ECS task definitions.')
+
+    booleanParam(name: 'PROMOTE_PRODUCTION', defaultValue: false, description: 'Show a manual gate and promote the same immutable image to production.')
+    string(name: 'PRODUCTION_APPROVERS', defaultValue: '', description: 'Optional comma-separated Jenkins user IDs allowed to approve.')
+    string(name: 'APPROVAL_TIMEOUT_MINUTES', defaultValue: '30', description: 'How long Jenkins waits for production approval.')
+  }
+
+  environment {
+    TARGET_DIR = "${WORKSPACE}"
+    SCAN_REPORT_DIR = "${WORKSPACE}/scan-reports"
+  }
+
+  options {
+    skipDefaultCheckout(true)
+    timeout(time: 2, unit: 'HOURS')
+    disableConcurrentBuilds()
+    buildDiscarder(logRotator(numToKeepStr: '20'))
+  }
+
+  stages {
+    stage('1. Checkout Monorepo') {
+      steps {
+        deleteDir()
+        script {
+          Map scmVars = checkout(scm) as Map
+          String commitSha = (scmVars.GIT_COMMIT ?: sh(
+            script: 'git rev-parse HEAD',
+            returnStdout: true
+          )).trim()
+          String branchName = (
+            env.CHANGE_BRANCH ?: env.BRANCH_NAME ?: scmVars.GIT_BRANCH ?: 'unknown'
+          ).replaceFirst(/^origin\//, '')
+          String commitMessage = sh(
+            script: 'git log -1 --pretty=%B',
+            returnStdout: true
+          ).trim()
+
+          env.GIT_COMMIT_SHA = commitSha
+          env.GIT_COMMIT_SHORT = commitSha.take(12)
+          env.SOURCE_BRANCH = branchName
+          env.SKIP_PIPELINE = commitMessage.contains('[skip ci]') ? 'true' : 'false'
+
+          echo "Source branch: ${env.SOURCE_BRANCH}"
+          echo "Source commit: ${env.GIT_COMMIT_SHA}"
+          if (env.SKIP_PIPELINE == 'true') {
+            echo 'The commit contains [skip ci]; deployment stages will be skipped.'
+          }
+        }
+      }
+    }
+
+    stage('CI/CD') {
+      when {
+        expression { env.SKIP_PIPELINE != 'true' }
+      }
+
+      stages {
+        stage('2. Validate Inputs and Metadata') {
+          steps {
+            script {
+              String registry = params.REGISTRY_TARGET == 'ecr' ?
+                params.ECR_REGISTRY.trim() : params.LOCAL_REGISTRY.trim()
+              String repository = params.IMAGE_REPOSITORY.trim().replaceAll('^/+|/+$', '')
+              String releaseBranch = params.RELEASE_BRANCH.trim()
+
+              if (!registry) {
+                error("${params.REGISTRY_TARGET == 'ecr' ? 'ECR_REGISTRY' : 'LOCAL_REGISTRY'} is required.")
+              }
+              if (registry.contains('://') || registry.endsWith('/')) {
+                error('Registry must be a host name without scheme or trailing slash.')
+              }
+              if (!repository) {
+                error('IMAGE_REPOSITORY is required.')
+              }
+              if (!releaseBranch) {
+                error('RELEASE_BRANCH is required.')
+              }
+              if (params.ENABLE_DAST && !params.STAGING_URL.trim()) {
+                error('STAGING_URL is required when ENABLE_DAST=true.')
+              }
+              if (params.ENABLE_S3_UPLOAD && !params.SECURITY_REPORT_BUCKET.trim()) {
+                error('SECURITY_REPORT_BUCKET is required when ENABLE_S3_UPLOAD=true.')
+              }
+              if (params.ENABLE_GITOPS_UPDATE && (
+                !params.GITOPS_REPO_URL.trim() ||
+                !params.GITOPS_BRANCH.trim() ||
+                !params.GIT_CREDENTIALS_ID.trim()
+              )) {
+                error('GitOps repo URL, branch, and credential ID are required.')
+              }
+              if (params.ENABLE_ECS_DEPLOY && params.REGISTRY_TARGET != 'ecr') {
+                error('ENABLE_ECS_DEPLOY requires REGISTRY_TARGET=ecr.')
+              }
+              if (params.ENABLE_ECS_DEPLOY && (
+                !params.ECS_CLUSTER.trim() ||
+                !params.ECS_STAGING_SERVICE.trim() ||
+                !params.ECS_STAGING_TASK_FAMILY.trim() ||
+                !params.ECS_CONTAINER_NAME.trim()
+              )) {
+                error('ECS cluster, staging service, task family, and container name are required.')
+              }
+              if (params.PROMOTE_PRODUCTION &&
+                !params.ENABLE_GITOPS_UPDATE &&
+                !params.ENABLE_ECS_DEPLOY) {
+                error('Production promotion requires GitOps, ECS deployment, or both.')
+              }
+              if (params.PROMOTE_PRODUCTION && params.SECURITY_MODE != 'enforce') {
+                error('Production promotion requires SECURITY_MODE=enforce.')
+              }
+              if (params.PROMOTE_PRODUCTION && params.ENABLE_ECS_DEPLOY && (
+                !params.ECS_PRODUCTION_SERVICE.trim() ||
+                !params.ECS_PRODUCTION_TASK_FAMILY.trim()
+              )) {
+                error('ECS production service and task family are required for promotion.')
+              }
+
+              int approvalTimeout
+              try {
+                approvalTimeout = params.APPROVAL_TIMEOUT_MINUTES.toInteger()
+              } catch (NumberFormatException ignored) {
+                error('APPROVAL_TIMEOUT_MINUTES must be an integer.')
+              }
+              if (approvalTimeout < 1 || approvalTimeout > 1440) {
+                error('APPROVAL_TIMEOUT_MINUTES must be between 1 and 1440.')
+              }
+
+              env.REGISTRY = registry
+              env.REPO_NAME = repository
+              env.IMAGE_NAME = "${registry}/${repository}"
+              env.IMAGE_TAG = env.GIT_COMMIT_SHORT
+              env.IMAGE_URI = "${env.IMAGE_NAME}:${env.IMAGE_TAG}"
+              env.LATEST_IMAGE_URI = "${env.IMAGE_NAME}:latest"
+              env.IS_RELEASE_BRANCH = (env.SOURCE_BRANCH == releaseBranch).toString()
+              env.APPROVAL_TIMEOUT = approvalTimeout.toString()
+
+              sh '''#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p "${SCAN_REPORT_DIR}"
+test -f app/Dockerfile
+test -f app/package.json
+'''
+
+              writeFile(
+                file: 'scan-reports/pipeline-metadata.txt',
+                text: """source_branch=${env.SOURCE_BRANCH}
+source_commit=${env.GIT_COMMIT_SHA}
+image_uri=${env.IMAGE_URI}
+registry_target=${params.REGISTRY_TARGET}
+security_mode=${params.SECURITY_MODE}
+release_branch=${releaseBranch}
+"""
+              )
+
+              currentBuild.description = "${env.SOURCE_BRANCH} -> ${env.IMAGE_TAG}"
+              echo "Immutable image: ${env.IMAGE_URI}"
+              echo "Release branch: ${env.IS_RELEASE_BRANCH}"
+            }
+          }
+        }
+
+        stage('3. Security Contract') {
+          steps {
+            script {
+              List<String> scripts = [
+                'ci/stages/secrets-scan.sh',
+                'ci/stages/sca-scan.sh',
+                'ci/stages/sast-scan.sh',
+                'ci/stages/iac-scan.sh',
+                'ci/stages/container-scan.sh',
+                'ci/stages/dast-scan.sh'
+              ]
+              List<String> statusLines = scripts.collect { String path ->
+                boolean ready = fileExists(path) &&
+                  sh(script: "test -s '${path}'", returnStatus: true) == 0
+                return "${path}=${ready ? 'ready' : 'missing-or-empty'}"
+              }
+              statusLines.add(0, "security_mode=${params.SECURITY_MODE}")
+              writeFile(
+                file: 'scan-reports/security-integration-status.txt',
+                text: statusLines.join('\n') + '\n'
+              )
+              echo statusLines.join('\n')
+            }
+          }
+        }
+
+        stage('4. Secrets Scan') {
+          when { expression { params.SECURITY_MODE != 'stub' } }
+          steps {
+            script {
+              runSecurityScript([
+                name: 'Secrets scan',
+                script: 'ci/stages/secrets-scan.sh',
+                expectedReports: ['scan-reports/gitleaks-report.json'],
+                environment: [
+                  "SCAN_DIR=${env.TARGET_DIR}",
+                  "SCAN_REPORT_DIR=${env.SCAN_REPORT_DIR}"
+                ]
+              ])
+            }
+          }
+        }
+
+        stage('5. SCA Scan') {
+          when { expression { params.SECURITY_MODE != 'stub' } }
+          steps {
+            script {
+              runSecurityScript([
+                name: 'SCA scan',
+                script: 'ci/stages/sca-scan.sh',
+                expectedReports: [
+                  'scan-reports/trivy-sca-report.json',
+                  'scan-reports/trivy-sca-report.html'
+                ],
+                environment: [
+                  "SCAN_DIR=${env.TARGET_DIR}",
+                  "SCAN_REPORT_DIR=${env.SCAN_REPORT_DIR}"
+                ]
+              ])
+            }
+          }
+        }
+
+        stage('6. SAST Scan') {
+          when {
+            allOf {
+              expression { params.SECURITY_MODE != 'stub' }
+              expression { params.ENABLE_SAST }
+            }
+          }
+          steps {
+            withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+              script {
+                runSecurityScript([
+                  name: 'SAST scan',
+                  script: 'ci/stages/sast-scan.sh',
+                  environment: [
+                    "SCAN_DIR=${env.TARGET_DIR}",
+                    "SONAR_HOST=${params.SONAR_HOST_URL}",
+                    "IMAGE_TAG=${env.IMAGE_TAG}"
+                  ]
+                ])
+              }
+            }
+          }
+        }
+
+        stage('7. IaC Scan') {
+          when { expression { params.SECURITY_MODE != 'stub' } }
+          steps {
+            script {
+              runSecurityScript([
+                name: 'IaC scan',
+                script: 'ci/stages/iac-scan.sh',
+                expectedReports: ['scan-reports/checkov_report.json'],
+                environment: [
+                  "SCAN_DIR=${env.TARGET_DIR}",
+                  "SCAN_REPORT_DIR=${env.SCAN_REPORT_DIR}"
+                ]
+              ])
+            }
+          }
+        }
+
+        stage('8. Build Docker Image') {
+          steps {
+            sh '''#!/usr/bin/env bash
+set -euo pipefail
+docker build \
+  --label "org.opencontainers.image.revision=${GIT_COMMIT_SHA}" \
+  --label "org.opencontainers.image.source=${GIT_URL:-local}" \
+  -t "${IMAGE_URI}" \
+  -t "${LATEST_IMAGE_URI}" \
+  -f app/Dockerfile \
+  app
+docker image inspect "${IMAGE_URI}" >/dev/null
+'''
+          }
+        }
+
+        stage('9. Container Scan') {
+          when { expression { params.SECURITY_MODE != 'stub' } }
+          steps {
+            script {
+              runSecurityScript([
+                name: 'Container scan',
+                script: 'ci/stages/container-scan.sh',
+                expectedReports: ['scan-reports/container-scan-report.json'],
+                environment: [
+                  "IMAGE_FULL_PATH=${env.IMAGE_URI}",
+                  "SCAN_REPORT_DIR=${env.SCAN_REPORT_DIR}"
+                ]
+              ])
+            }
+          }
+        }
+
+        stage('10. Amazon ECR Login') {
+          when { expression { params.REGISTRY_TARGET == 'ecr' } }
+          steps {
+            script {
+              withAwsAuth {
+                sh '''#!/usr/bin/env bash
+set +x
+set -euo pipefail
+aws sts get-caller-identity --output json > "${SCAN_REPORT_DIR}/aws-caller-identity.json"
+aws ecr get-login-password --region "${AWS_REGION}" \
+  | docker login --username AWS --password-stdin "${REGISTRY}"
+'''
+              }
+            }
+          }
+        }
+
+        stage('11. Push Image') {
+          steps {
+            sh '''#!/usr/bin/env bash
+set -euo pipefail
+docker push "${IMAGE_URI}"
+
+if [ "${IS_RELEASE_BRANCH}" = "true" ]; then
+  docker push "${LATEST_IMAGE_URI}"
+else
+  echo "Not on ${RELEASE_BRANCH:-release branch}; latest tag was not pushed."
+fi
+'''
+          }
+        }
+
+        stage('12. Update GitOps Staging') {
+          when {
+            allOf {
+              expression { params.ENABLE_GITOPS_UPDATE }
+              expression { env.IS_RELEASE_BRANCH == 'true' }
+            }
+          }
+          steps {
+            script {
+              updateGitOpsOverlay('staging')
+            }
+          }
+        }
+
+        stage('13. Deploy ECS Staging') {
+          when {
+            allOf {
+              expression { params.ENABLE_ECS_DEPLOY }
+              expression { env.IS_RELEASE_BRANCH == 'true' }
+            }
+          }
+          steps {
+            script {
+              withAwsAuth {
+                deployEcsService(params.ECS_STAGING_SERVICE, params.ECS_STAGING_TASK_FAMILY)
+              }
+            }
+          }
+        }
+
+        stage('14. DAST Staging') {
+          when {
+            allOf {
+              expression { params.SECURITY_MODE != 'stub' }
+              expression { params.ENABLE_DAST }
+              expression { env.IS_RELEASE_BRANCH == 'true' }
+            }
+          }
+          steps {
+            script {
+              runSecurityScript([
+                name: 'DAST scan',
+                script: 'ci/stages/dast-scan.sh',
+                expectedReports: [
+                  'scan-reports/zap-report.html',
+                  'scan-reports/zap-report.xml',
+                  'scan-reports/zap-report.json'
+                ],
+                environment: [
+                  "TARGET_URL=${params.STAGING_URL}",
+                  "REPORT_DIR=${env.SCAN_REPORT_DIR}"
+                ]
+              ])
+            }
+          }
+        }
+
+        stage('15. Upload Security Reports to S3') {
+          when { expression { params.ENABLE_S3_UPLOAD } }
+          steps {
+            script {
+              withAwsAuth {
+                withEnv(["SECURITY_REPORT_BUCKET=${params.SECURITY_REPORT_BUCKET}"]) {
+                  sh '''#!/usr/bin/env bash
+set -euo pipefail
+
+BUILD_PREFIX="${JOB_NAME}/${BUILD_NUMBER}-${IMAGE_TAG}"
+
+upload_if_present() {
+  local prefix="$1"
+  local report="$2"
+  if [ -f "${report}" ]; then
+    aws s3 cp "${report}" \
+      "s3://${SECURITY_REPORT_BUCKET}/reports/${prefix}/${BUILD_PREFIX}/$(basename "${report}")" \
+      --only-show-errors
+  else
+    echo "Skipping missing report: ${report}"
+  fi
+}
+
+upload_if_present secrets scan-reports/gitleaks-report.json
+upload_if_present sca scan-reports/trivy-sca-report.json
+upload_if_present sca scan-reports/trivy-sca-report.html
+upload_if_present container scan-reports/container-scan-report.json
+upload_if_present dast scan-reports/zap-report.json
+upload_if_present dast scan-reports/zap-report.html
+upload_if_present iac scan-reports/checkov_report.json
+upload_if_present metadata scan-reports/security-integration-status.txt
+'''
+                }
+              }
+            }
+          }
+        }
+
+        stage('16. Production Approval') {
+          when {
+            allOf {
+              expression { params.PROMOTE_PRODUCTION }
+              expression { env.IS_RELEASE_BRANCH == 'true' }
+            }
+          }
+          steps {
+            script {
+              Map approval = [
+                id: 'ProductionPromotion',
+                message: "Promote immutable image ${env.IMAGE_URI} to production?",
+                ok: 'Promote to production'
+              ]
+              if (params.PRODUCTION_APPROVERS.trim()) {
+                approval.submitter = params.PRODUCTION_APPROVERS.trim()
+                approval.submitterParameter = 'APPROVED_BY'
+              }
+
+              timeout(time: env.APPROVAL_TIMEOUT.toInteger(), unit: 'MINUTES') {
+                Object result = input(approval)
+                env.APPROVED_BY = result ? result.toString() : 'authenticated-user'
+              }
+              echo "Production promotion approved by ${env.APPROVED_BY}."
+            }
+          }
+        }
+
+        stage('17. Update GitOps Production') {
+          when {
+            allOf {
+              expression { params.PROMOTE_PRODUCTION }
+              expression { params.ENABLE_GITOPS_UPDATE }
+              expression { env.IS_RELEASE_BRANCH == 'true' }
+            }
+          }
+          steps {
+            script {
+              updateGitOpsOverlay('production')
+            }
+          }
+        }
+
+        stage('18. Deploy ECS Production') {
+          when {
+            allOf {
+              expression { params.PROMOTE_PRODUCTION }
+              expression { params.ENABLE_ECS_DEPLOY }
+              expression { env.IS_RELEASE_BRANCH == 'true' }
+            }
+          }
+          steps {
+            script {
+              withAwsAuth {
+                deployEcsService(params.ECS_PRODUCTION_SERVICE, params.ECS_PRODUCTION_TASK_FAMILY)
+              }
+            }
+          }
+        }
+
+        stage('19. Summary') {
+          steps {
+            echo """CI/CD pipeline completed.
+Source: ${env.SOURCE_BRANCH}@${env.GIT_COMMIT_SHORT}
+Image: ${env.IMAGE_URI}
+Security mode: ${params.SECURITY_MODE}
+GitOps enabled: ${params.ENABLE_GITOPS_UPDATE}
+ECS enabled: ${params.ENABLE_ECS_DEPLOY}
+Production requested: ${params.PROMOTE_PRODUCTION}
+"""
+          }
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      archiveArtifacts(
+        artifacts: 'scan-reports/**/*',
+        allowEmptyArchive: true,
+        fingerprint: true
+      )
+    }
+    cleanup {
+      script {
+        if (params.REGISTRY_TARGET == 'ecr' && env.REGISTRY) {
+          sh(script: 'docker logout "${REGISTRY}" >/dev/null 2>&1 || true')
+        }
+      }
+    }
+  }
+}

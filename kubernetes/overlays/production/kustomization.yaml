@@ -5,7 +5,9 @@ resources:
   - ../../base
 images:
   - name: tetris-devsecops
-    newName: 997961584240.dkr.ecr.ap-southeast-1.amazonaws.com/devsecops/ecr
+    # Local-safe default. Jenkins replaces this with the selected local/ECR URI
+    # after the production approval gate.
+    newName: localhost:5001/devsecops/tetris
     newTag: latest   # Promoted by Jenkins after manual approval
 patches:
   - patch: |-

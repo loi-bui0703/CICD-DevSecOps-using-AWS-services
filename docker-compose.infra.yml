@@ -1,8 +1,7 @@
 # =============================================================================
 # docker-compose.infra.yml — Owner by Nhat linh (Infrastructure + CI/CD)
 #
-# Services: Jenkins CI (GitHub source + AWS ECR registry)
-# Ports: defined in shared/contracts/ports.yaml
+# Services: Jenkins CI and a local Docker Registry fallback.
 #
 # Run standalone (Team 1 testing):
 #   docker compose -f docker-compose.infra.yml up -d
@@ -18,10 +17,30 @@ networks:
 
 volumes:
   jenkins_home:
+  registry_data:
 
 services:
 
-  # ── Jenkins CI ─────────────────────────────────────────
+  local-registry:
+    image: registry:2.8.3
+    container_name: local-registry
+    restart: unless-stopped
+    environment:
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"
+    ports:
+      - "${LOCAL_REGISTRY_PORT:-5001}:5000"
+    volumes:
+      - registry_data:/var/lib/registry
+    networks:
+      - devsecops
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:5000/v2/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  # Jenkins CI
   # Pipeline orchestrator. GitHub source + AWS ECR registry
   # Port: 8080 UI, 50000 agent
   jenkins:
@@ -36,6 +55,19 @@ services:
 
     environment:
       DOCKER_HOST: unix:///var/run/docker.sock
+      REGISTRY: ${REGISTRY:-localhost:5001}
+      REPO_NAME: ${REPO_NAME:-devsecops/tetris}
+      AWS_REGION: ${AWS_REGION:-ap-southeast-1}
+      AWS_DEFAULT_REGION: ${AWS_REGION:-ap-southeast-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      GITOPS_REPO_URL: ${GITOPS_REPO_URL:-https://github.com/loi-bui0703/FCAJ-final-project.git}
+      GITHUB_USERNAME: ${GITHUB_USERNAME:-x-access-token}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      JENKINS_ADMIN_PASS: ${JENKINS_ADMIN_PASS:-change-me-before-use}
+      SONAR_TOKEN: ${SONAR_TOKEN:-}
+      DEFECTDOJO_API_KEY: ${DEFECTDOJO_API_KEY:-}
       JAVA_OPTS: >-
         -Djenkins.install.runSetupWizard=false
         -Dorg.jenkinsci.plugins.durabletask.BourneShellScript.HEARTBEAT_CHECK_INTERVAL=86400
@@ -48,7 +80,9 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./ci/jenkins-casc.yaml:/var/jenkins_home/casc_configs/jenkins.yaml:ro
       - ./ci/plugins.txt:/usr/share/jenkins/ref/plugins.txt:ro
-      - ./shared/contracts:/shared/contracts:ro
+    depends_on:
+      local-registry:
+        condition: service_healthy
     networks:
       - devsecops
     healthcheck:
