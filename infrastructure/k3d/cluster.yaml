@@ -19,7 +19,7 @@ kubeAPI:
   host: "0.0.0.0"
   hostPort: "6443"
 
-network: devsecops-net 
+network: devsecops
 
 ports:
   - port: 80:80
