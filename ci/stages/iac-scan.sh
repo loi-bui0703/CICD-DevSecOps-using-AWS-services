@@ -1,41 +1,62 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+REQUESTED_SCAN_DIR="${SCAN_DIR:-${1:-}}"
+if [ -n "${REQUESTED_SCAN_DIR}" ] && [ "${REQUESTED_SCAN_DIR}" != "." ]; then
+  SCAN_DIR="${REQUESTED_SCAN_DIR}"
+elif [ -d "target-repo" ]; then
+  SCAN_DIR="target-repo"
+else
+  SCAN_DIR="."
+fi
+
+SCAN_REPORT_DIR="${SCAN_REPORT_DIR:-$(pwd)/scan-reports}"
+RAW_IAC_DIR="${SCAN_REPORT_DIR}/raw/iac"
+JSON_REPORT="${RAW_IAC_DIR}/checkov-report.json"
+LEGACY_JSON_REPORT="checkov_report.json"
+CHECKOV_DATA_CONTAINER="checkov-data-${BUILD_NUMBER:-$$}"
+
+cleanup() {
+  docker rm -f "${CHECKOV_DATA_CONTAINER}" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
 echo "============================================================"
-echo "  IaC SCAN — Checkov"
+echo "  IaC SCAN - Checkov"
+echo "  Scan target : ${SCAN_DIR}"
+echo "  Report file : ${JSON_REPORT}"
 echo "============================================================"
 
-docker rm -f checkov-data 2>/dev/null || true
+mkdir -p "${RAW_IAC_DIR}"
+cleanup
 
-echo "[*] Creating temporary storage container..."
-docker create -v /tf --name checkov-data alpine:latest /bin/true
+echo "[*] Creating temporary scan volume..."
+docker create -v /tf --name "${CHECKOV_DATA_CONTAINER}" alpine:latest /bin/true >/dev/null
 
-echo "[*] Copying target repository..."
-docker cp ./target-repo checkov-data:/tf/
+echo "[*] Copying scan target into temporary volume..."
+docker cp "${SCAN_DIR}" "${CHECKOV_DATA_CONTAINER}:/tf/scan-target"
 
-echo "[*] Running Checkov Scan (Console Output)..."
+echo "[*] Running Checkov summary..."
 docker run --rm \
-    --volumes-from checkov-data \
-    bridgecrew/checkov:latest \
-    --directory /tf/target-repo \
-    --soft-fail \
-    --quiet
+  --volumes-from "${CHECKOV_DATA_CONTAINER}" \
+  bridgecrew/checkov:latest \
+  --directory /tf/scan-target \
+  --soft-fail \
+  --quiet
 
 echo "[*] Generating JSON report..."
 docker run --rm \
-    --volumes-from checkov-data \
-    bridgecrew/checkov:latest \
-    --directory /tf/target-repo \
-    --soft-fail \
-    --output json > checkov_report.json
+  --volumes-from "${CHECKOV_DATA_CONTAINER}" \
+  bridgecrew/checkov:latest \
+  --directory /tf/scan-target \
+  --soft-fail \
+  --output json > "${JSON_REPORT}"
 
-echo "[*] Cleaning up temporary resources..."
-docker rm -v checkov-data >/dev/null
+cp "${JSON_REPORT}" "${LEGACY_JSON_REPORT}" 2>/dev/null || true
 
-if [ -s checkov_report.json ]; then
-    echo "============================================================"
-    echo "[+] IaC Scan completed successfully."
-    grep -E "passed|failed|resource_count" checkov_report.json | head -n 5
-    echo "============================================================"
-else
-    echo "[!] Error: Report file was not generated."
-    exit 1
+if [ ! -s "${JSON_REPORT}" ]; then
+  echo "[!] Checkov report was not generated."
+  exit 1
 fi
+
+echo "[+] IaC scan completed."

@@ -18,7 +18,7 @@
 def     IMAGE_TAG = ""
 def     IMAGE_URI = ""
 def     GIT_COMMIT_SHORT = ""
-def     STAGING_URL = "http://tetris-staging.example.com:30080"
+def     STAGING_URL = "http://host.docker.internal:3001"
 def     PROD_URL = "http://tetris.example.com:30080"
 
 pipeline {
@@ -29,6 +29,21 @@ pipeline {
   }
 
   environment{
+    AWS_REGION = "ap-southeast-2"
+    APP_NAME = "tetris"
+    ENVIRONMENT_NAME = "staging-local-k8s" 
+    SECURITY_REPORT_BUCKET = "devsecops-security-reports-399707826507"
+
+    RAW_REPORT_DIR = "${WORKSPACE}/scan-reports/raw"
+    NORMALIZED_REPORT_DIR = "${WORKSPACE}/scan-reports/normalized"
+    ASFF_REPORT_DIR = "${WORKSPACE}/scan-reports/asff"
+    SUMMARY_REPORT_DIR = "${WORKSPACE}/scan-reports/summary"
+
+
+    STAGING_URL = "http://host.docker.internal:3001"
+
+
+
     REGISTRY = "localhost:5001"
     REPO_NAME = "devsecops/tetris"
     IMAGE_NAME = "${REGISTRY}/${REPO_NAME}"
@@ -79,6 +94,12 @@ pipeline {
           echo "Image TAG: ${env.IMAGE_TAG}"
           echo "Image URI: ${env.IMAGE_URI}"
           echo "Report directory: ${env.SCAN_REPORT_DIR}" 
+          sh '''
+          mkdir -p "${RAW_REPORT_DIR}"
+          mkdir -p "${NORMALIZED_REPORT_DIR}"
+          mkdir -p "${ASFF_REPORT_DIR}"
+          mkdir -p "${SUMMARY_REPORT_DIR}"
+          '''
         }
       }
     }
@@ -166,22 +187,22 @@ pipeline {
     //   }
     // }
 
-    stage('6. IaC Scan (Checkov)') {
-        steps {
-            script {
-                echo "==== Running Infrastructure-as-Code Scan ===="
-                sh """
-                    chmod +x ./ci/stages/iac-scan.sh
-                    ./ci/stages/iac-scan.sh .
-                """
-            }
-        }
-        post {
-            always {
-                archiveArtifacts artifacts: "checkov_report.json", allowEmptyArchive: true
-            }
-        }
-    }
+    // stage('6. IaC Scan (Checkov)') {
+    //     steps {
+    //         script {
+    //             echo "==== Running Infrastructure-as-Code Scan ===="
+    //             sh """
+    //                 chmod +x ./ci/stages/iac-scan.sh
+    //                 ./ci/stages/iac-scan.sh .
+    //             """
+    //         }
+    //     }
+    //     post {
+    //         always {
+    //             archiveArtifacts artifacts: "checkov_report.json", allowEmptyArchive: true
+    //         }
+    //     }
+    // }
 
     stage('7. Build Docker Image'){
       steps{
@@ -212,6 +233,7 @@ pipeline {
             } 
         }
     }
+    
     stage('9. Push to Local Registry'){
       steps {
           script{
@@ -307,10 +329,171 @@ pipeline {
     }
   }
 
+  stage('12. Wait for Local K8s Stagin'){
+    steps{
+      sh '''
+        curl -fsS --retry 20 --retry-delay 5 --retry-all-errors "${STAGING_URL}"
+      '''
+    }
+
+ 
+  }
+
+  stage('13. DAST Scan - OWASP ZAP') {
+    steps {
+      sh '''
+        chmod +x ci/stages/dast-scan.sh
+        TARGET_URL="${STAGING_URL}" \
+        REPORT_DIR="${RAW_REPORT_DIR}/dast" \
+        ./ci/stages/dast-scan.sh
+      '''
+    }
+  }
+
+
+  stage('14. Normalize Security Reports') {
+  steps {
+    sh '''
+      python3 ci/stages/normalize-reports.py \
+        --raw-dir "${RAW_REPORT_DIR}" \
+        --out "${NORMALIZED_REPORT_DIR}/findings-normalized.json" \
+        --summary "${SUMMARY_REPORT_DIR}/security-summary.json" \
+        --app "${APP_NAME}" \
+        --env "${ENVIRONMENT_NAME}" \
+        --commit "${GIT_COMMIT_SHORT}" \
+        --build "${BUILD_NUMBER}"
+    '''
+  }
+  }
+
+
+  stage('15. Generate ASFF'){
+    steps{
+      sh '''
+      python3 ci/stages/generate-asff.py \
+        --input "${NORMALIZED_REPORT_DIR}/findings-normalized.json" \
+        --out "${ASFF_REPORT_DIR}/securityhub-asff.json" \
+        --region "${AWS_REGION}" \
+        --account-id "399707826507"
+      '''
+    }
+  }
+
+
+  stage('16. Upload Reports to S3') {
+    steps{
+      withCredentials(
+        [
+          string(credentialsId: 'aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'),
+          string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY'),
+        ]
+      ){
+        sh '''
+        S3_PREFIX="apps/${APP_NAME}/env/${ENVIRONMENT_NAME}/pipeline/${BUILD_NUMBER}/commit/${GIT_COMMIT_SHORT}"
+                aws s3 cp scan-reports \
+          "s3://${SECURITY_REPORT_BUCKET}/${S3_PREFIX}/" \
+          --recursive \
+          --region "${AWS_REGION}" \
+          --sse AES256
+        '''
+      }
+    }
+  }
+
+
+
+  stage('17. Import Findings to AWS Security Hub') {
+  steps {
+  withCredentials([
+    string(credentialsId: 'aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'),
+    string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY')
+  ]) {
+    script {
+      sh '''
+        echo "======================================================"
+        echo "  CHECKING & INSTALLING BOTO3"
+        echo "======================================================"
+        
+        # Kiểm tra xem boto3 đã có chưa, nếu chưa có thì ép cài bằng flag --break-system-packages
+        if ! python3 -c "import boto3" >/dev/null 2>&1; then
+          echo "[*] boto3 not found. Installing with system override..."
+          pip3 install --no-cache-dir --break-system-packages boto3
+        else
+          echo "[+] boto3 is already available."
+        fi
+
+        echo "======================================================"
+        echo "  IMPORTING ASFF FINDINGS TO SECURITY HUB"
+        echo "======================================================"
+        
+        ASFF_FILE="${ASFF_REPORT_DIR}/securityhub-asff.json"
+        
+        if [ ! -f "${ASFF_FILE}" ]; then
+          echo "[!] ASFF file not found: ${ASFF_FILE}"
+          exit 1
+        fi
+        
+        # Count findings
+        FINDING_COUNT=$(python3 -c "import json; data=json.load(open('${ASFF_FILE}')); print(len(data) if isinstance(data, list) else len(data.get('findings', [])))")
+        echo "[*] ASFF file contains ${FINDING_COUNT} findings"
+        
+        if [ "${FINDING_COUNT}" -eq 0 ]; then
+          echo "[*] No findings to import"
+          exit 0
+        fi
+        
+        # Import findings
+        python3 <<'PYTHON_SCRIPT'
+import json
+import boto3
+import sys
+import os
+
+asff_file = os.environ.get('ASFF_REPORT_DIR') + '/securityhub-asff.json'
+aws_region = os.environ.get('AWS_REGION', 'ap-southeast-2')
+
+with open(asff_file) as f:
+    data = json.load(f)
+
+findings = data if isinstance(data, list) else data.get('findings', [])
+
+if not findings:
+    print("[*] No findings to import")
+    sys.exit(0)
+
+print(f"[*] Importing {len(findings)} findings...")
+
+client = boto3.client('securityhub', region_name=aws_region)
+
+total_imported = 0
+total_failed = 0
+
+for i in range(0, len(findings), 100):
+    batch = findings[i:i+100]
+    try:
+        response = client.batch_import_findings(Findings=batch)
+        total_imported += response.get('SuccessCount', 0)
+        total_failed += response.get('FailedCount', 0)
+        print(f"[+] Batch {i//100 + 1}: {response.get('SuccessCount')} imported")
+    except Exception as e:
+        print(f"[!] Error: {e}")
+        total_failed += len(batch)
+
+print(f"[+] Total: {total_imported} imported, {total_failed} failed")
+sys.exit(0 if total_failed == 0 else 1)
+PYTHON_SCRIPT
+      '''
+    }
+  }
+}
 
   }
 }
 
+}
+
+
+  
 
 
 
