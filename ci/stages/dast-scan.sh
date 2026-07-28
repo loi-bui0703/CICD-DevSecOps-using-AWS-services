@@ -28,7 +28,7 @@ docker create -v /zap/wrk --name "${ZAP_DATA_CONTAINER}" alpine:latest /bin/true
 docker run --rm \
   --user root \
   --add-host=host.docker.internal:host-gateway \
-  --network "${DOCKER_NETWORK:-devsecops}" \
+  --network "${DOCKER_NETWORK:-bridge}" \
   --volumes-from "${ZAP_DATA_CONTAINER}" \
   ghcr.io/zaproxy/zaproxy:stable \
   zap-baseline.py \
