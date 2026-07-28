@@ -239,6 +239,11 @@ pipeline {
       defaultValue: 'devsecops/tetris',
       description: 'Repository path inside the selected registry.'
     )
+    string(
+      name: 'IMAGE_PLATFORM',
+      defaultValue: 'linux/amd64',
+      description: 'Target image platform. ECS Fargate uses linux/amd64 by default.'
+    )
     string(name: 'AWS_REGION', defaultValue: 'ap-southeast-1', description: 'AWS region.')
     choice(
       name: 'AWS_AUTH_MODE',
@@ -365,6 +370,9 @@ pipeline {
               if (!repository) {
                 error('IMAGE_REPOSITORY is required.')
               }
+              if (!(params.IMAGE_PLATFORM.trim() ==~ /^linux\/(amd64|arm64)$/)) {
+                error('IMAGE_PLATFORM must be linux/amd64 or linux/arm64.')
+              }
               if (!releaseBranch) {
                 error('RELEASE_BRANCH is required.')
               }
@@ -436,6 +444,7 @@ pipeline {
 
               env.REGISTRY = registry
               env.REPO_NAME = repository
+              env.IMAGE_PLATFORM = params.IMAGE_PLATFORM.trim()
               env.IMAGE_NAME = "${registry}/${repository}"
               env.IMAGE_TAG = env.GIT_COMMIT_SHORT
               env.IMAGE_URI = "${env.IMAGE_NAME}:${env.IMAGE_TAG}"
@@ -455,6 +464,7 @@ test -f app/package.json
                 text: """source_branch=${env.SOURCE_BRANCH}
 source_commit=${env.GIT_COMMIT_SHA}
 image_uri=${env.IMAGE_URI}
+image_platform=${env.IMAGE_PLATFORM}
 registry_target=${params.REGISTRY_TARGET}
 security_mode=${params.SECURITY_MODE}
 release_branch=${releaseBranch}
@@ -575,6 +585,7 @@ release_branch=${releaseBranch}
             sh '''#!/usr/bin/env bash
 set -euo pipefail
 docker build \
+  --platform "${IMAGE_PLATFORM}" \
   --label "org.opencontainers.image.revision=${GIT_COMMIT_SHA}" \
   --label "org.opencontainers.image.source=${GIT_URL:-local}" \
   -t "${IMAGE_URI}" \

@@ -111,6 +111,7 @@ gắn credential `github-token`.
 Luồng demo đầy đủ dùng:
 
 - `REGISTRY_TARGET=ecr`
+- `IMAGE_PLATFORM=linux/amd64` cho ECS Fargate mặc định
 - `SECURITY_MODE=enforce`
 - `SECURITY_BLOCK_SEVERITIES=CRITICAL` (hoặc `CRITICAL,HIGH`)
 - `ENABLE_ECS_DEPLOY=true`
