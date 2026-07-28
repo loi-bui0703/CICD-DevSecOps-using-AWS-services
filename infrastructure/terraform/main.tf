@@ -713,11 +713,54 @@ resource "aws_ecs_task_definition" "tetris" {
 
   container_definitions = jsonencode([
     {
+      name                   = "volume-permissions"
+      image                  = "${aws_ecr_repository.tetris.repository_url}:latest"
+      essential              = false
+      user                   = "0"
+      readonlyRootFilesystem = true
+      command = [
+        "sh",
+        "-c",
+        "chown -R 101:101 /var/cache/nginx /var/run /tmp"
+      ]
+      mountPoints = [
+        {
+          sourceVolume  = "nginx-cache"
+          containerPath = "/var/cache/nginx"
+          readOnly      = false
+        },
+        {
+          sourceVolume  = "nginx-run"
+          containerPath = "/var/run"
+          readOnly      = false
+        },
+        {
+          sourceVolume  = "nginx-tmp"
+          containerPath = "/tmp"
+          readOnly      = false
+        }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.ecs.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "volume-permissions"
+        }
+      }
+    },
+    {
       name                   = "tetris"
       image                  = "${aws_ecr_repository.tetris.repository_url}:latest"
       essential              = true
       user                   = "101"
       readonlyRootFilesystem = true
+      dependsOn = [
+        {
+          containerName = "volume-permissions"
+          condition     = "SUCCESS"
+        }
+      ]
       portMappings = [
         {
           containerPort = var.container_port
