@@ -359,6 +359,7 @@ pipeline {
               String registry = params.REGISTRY_TARGET == 'ecr' ?
                 params.ECR_REGISTRY.trim() : params.LOCAL_REGISTRY.trim()
               String repository = params.IMAGE_REPOSITORY.trim().replaceAll('^/+|/+$', '')
+              String imagePlatform = (params.IMAGE_PLATFORM ?: 'linux/amd64').trim()
               String releaseBranch = params.RELEASE_BRANCH.trim()
 
               if (!registry) {
@@ -370,7 +371,7 @@ pipeline {
               if (!repository) {
                 error('IMAGE_REPOSITORY is required.')
               }
-              if (!(params.IMAGE_PLATFORM.trim() ==~ /^linux\/(amd64|arm64)$/)) {
+              if (!(imagePlatform ==~ /^linux\/(amd64|arm64)$/)) {
                 error('IMAGE_PLATFORM must be linux/amd64 or linux/arm64.')
               }
               if (!releaseBranch) {
@@ -444,7 +445,7 @@ pipeline {
 
               env.REGISTRY = registry
               env.REPO_NAME = repository
-              env.IMAGE_PLATFORM = params.IMAGE_PLATFORM.trim()
+              env.IMAGE_PLATFORM = imagePlatform
               env.IMAGE_NAME = "${registry}/${repository}"
               env.IMAGE_TAG = env.GIT_COMMIT_SHORT
               env.IMAGE_URI = "${env.IMAGE_NAME}:${env.IMAGE_TAG}"
