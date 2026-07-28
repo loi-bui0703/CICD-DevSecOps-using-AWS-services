@@ -183,14 +183,125 @@ muốn bật Security Hub và Lambda S3 trigger. Gắn output
 `jenkins_ci_policy_arn` vào IAM principal của Jenkins; ưu tiên IAM role/default
 credential chain thay vì access key dài hạn.
 
-Lưu ý chi phí: scale ECS về `0` chỉ dừng phí task. ALB, NAT/traffic, lưu trữ và
-các dịch vụ khác vẫn có thể tính phí. Kết thúc demo, xem plan rồi cleanup:
+### Tắt hoàn toàn sau demo
+
+Có hai mức cleanup khác nhau:
+
+- `make demo-reset` chỉ đưa ECS staging/production về `desiredCount=0`. Cách này
+  phù hợp khi sắp demo lại, nhưng hai ALB, ECR, S3 và tài nguyên khác vẫn tồn tại
+  và một số dịch vụ vẫn có thể tính phí.
+- `terraform destroy` xoá hạ tầng AWS của dự án. Hãy dùng cách này khi kết thúc
+  buổi demo và muốn ngăn chi phí mới từ các tài nguyên đó.
+
+Quy trình dưới đây xoá ECS, ALB, ECR cùng toàn bộ image, S3 cùng report,
+CloudWatch log group, VPC, IAM Jenkins, Budget và các tài nguyên Terraform liên
+quan. S3 report, ECR image và Jenkins AWS access key sẽ không thể khôi phục.
+
+#### 1. Ngăn Jenkins tạo deployment mới và tắt local stack
+
+Đảm bảo không có Jenkins build đang chạy hoặc đang chờ nút production gate, rồi
+chạy:
 
 ```bash
-CONFIRM_AWS_CLEANUP=devsecops-factory scripts/cleanup-aws.sh
-# Muốn destroy toàn bộ:
-CONFIRM_AWS_CLEANUP=devsecops-factory DESTROY_TERRAFORM=true scripts/cleanup-aws.sh
+cd /Users/loibui/Downloads/devsecops-factory/task-2
+
+# Chạy cả bốn lệnh là an toàn dù trước đó chỉ bật một phần stack.
+docker compose -f docker-compose.infra.yml down --remove-orphans
+docker compose -f docker-compose.security.yml down --remove-orphans
+docker compose -f docker-compose.obs.yml down --remove-orphans
+docker compose down --remove-orphans
+
+# Xoá riêng cluster Kubernetes local nếu đã tạo.
+make k3d-delete
 ```
+
+Không thêm `-v` nếu muốn giữ Jenkins history, scanner cache và dữ liệu local cho
+lần demo sau. Named volume nằm trên máy cá nhân và không phát sinh phí AWS.
+
+#### 2. Đăng nhập và kiểm tra đúng AWS account
+
+```bash
+aws sso login --profile devsecops-factory
+aws sts get-caller-identity --profile devsecops-factory
+```
+
+Kiểm tra trường `Account` là account đã dùng để demo. Với môi trường hiện tại,
+Account ID phải là `585572506644` (bốn số cuối `6644`). Không tiếp tục nếu ID
+khác, vì `terraform destroy` sẽ thao tác trên account đang đăng nhập.
+
+#### 3. Xem destroy plan và xoá toàn bộ AWS project
+
+Chạy cleanup script từ thư mục gốc repository:
+
+```bash
+AWS_PROFILE=devsecops-factory \
+EXPECTED_AWS_ACCOUNT_ID=585572506644 \
+CONFIRM_AWS_CLEANUP=devsecops-factory \
+DESTROY_TERRAFORM=true \
+./scripts/cleanup-aws.sh
+```
+
+Script sẽ scale ECS về `0`, hiển thị Terraform destroy plan và chờ xác nhận.
+Đọc dòng tổng kết: plan phải có `0 to add`, `0 to change` và chỉ có tài nguyên
+`to destroy`. Nhập chính xác `yes` để tiếp tục. Có thể mất 5–15 phút vì AWS cần
+drain ECS và thu hồi network interface trước khi xoá ALB/VPC.
+
+Terraform đã bật `force_delete` cho ECR và `force_destroy` cho IAM Jenkins, nên
+image cùng access key do Jenkins dùng cũng được thu hồi. Sau khi Terraform hoàn
+tất, script deregister các revision `tetris-app` do Jenkins tạo ngoài Terraform
+và chỉ thành công khi Terraform state đã rỗng.
+
+#### 4. Kiểm tra kết quả
+
+Lệnh đầu tiên phải không in tài nguyên nào. Các lệnh AWS còn lại phải trả về
+`[]` hoặc `0`:
+
+```bash
+terraform -chdir=infrastructure/terraform state list
+
+aws elbv2 describe-load-balancers \
+  --profile devsecops-factory --region ap-southeast-1 \
+  --query "LoadBalancers[?contains(LoadBalancerName, 'devsecops-factory')].LoadBalancerName"
+
+aws ecs list-clusters \
+  --profile devsecops-factory --region ap-southeast-1 \
+  --query "clusterArns[?contains(@, 'devsecops-factory')]"
+
+aws ecs list-task-definitions \
+  --profile devsecops-factory --region ap-southeast-1 \
+  --family-prefix tetris-app --status ACTIVE \
+  --query "length(taskDefinitionArns)"
+
+aws ecr describe-repositories \
+  --profile devsecops-factory --region ap-southeast-1 \
+  --query "repositories[?contains(repositoryName, 'devsecops')].repositoryName"
+
+aws s3api list-buckets \
+  --profile devsecops-factory \
+  --query "Buckets[?starts_with(Name, 'devsecops-reports-')].Name"
+
+aws ec2 describe-vpcs \
+  --profile devsecops-factory --region ap-southeast-1 \
+  --filters Name=tag:Name,Values=devsecops-factory-vpc \
+  --query "Vpcs[].VpcId"
+
+docker ps -a --format '{{.Names}}' |
+  grep -E '^(jenkins|devsecops-docker-engine|local-registry|sonarqube|prometheus|grafana|blackbox-exporter|k3d-devsecops)' |
+  wc -l
+```
+
+AWS Cost Explorer có độ trễ, vì vậy chi phí đã phát sinh trước lúc destroy vẫn
+có thể xuất hiện sau đó. Destroy ngăn tài nguyên dự án tiếp tục tạo chi phí mới;
+nó không xoá chi phí đã sử dụng và không tác động tới tài nguyên khác trong
+account.
+
+#### 5. Chuẩn bị cho lần demo tiếp theo
+
+Sau full destroy, chạy lại Terraform `plan`/`apply` trong mục **Triển khai AWS**.
+IAM user Jenkins sẽ được tạo lại nhưng access key cũ trong `.env` đã bị thu hồi.
+Hãy tạo access key mới cho output `jenkins_ci_user_name`, cập nhật
+`AWS_ACCESS_KEY_ID` và `AWS_SECRET_ACCESS_KEY` trong `.env`, rồi khởi động
+Jenkins. Không tái sử dụng hoặc chia sẻ access key cũ.
 
 ## Kiểm thử
 

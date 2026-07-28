@@ -113,6 +113,7 @@ resource "aws_iam_role" "ecs_task_role" {
 resource "aws_ecr_repository" "tetris" {
   name                 = "devsecops/tetris"
   image_tag_mutability = "MUTABLE"
+  force_delete         = true
 
   image_scanning_configuration {
     scan_on_push = true
@@ -418,7 +419,8 @@ resource "aws_iam_policy" "jenkins_ci" {
 resource "aws_iam_user" "jenkins_ci" {
   count = var.create_local_jenkins_user ? 1 : 0
 
-  name = "${var.project_name}-jenkins-ci"
+  name          = "${var.project_name}-jenkins-ci"
+  force_destroy = true
 
   tags = {
     Purpose = "Local Jenkins CI/CD"
