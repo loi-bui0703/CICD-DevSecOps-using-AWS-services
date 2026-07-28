@@ -1,0 +1,10 @@
+title = "DevSecOps Factory Gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Jenkins plugin lock entries are public plugin checksums, not credentials."
+paths = [
+  '''(^|/)ci/plugins\.txt$''',
+]

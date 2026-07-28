@@ -16,7 +16,7 @@ JENKINS_CONTAINER="task2-evidence-jenkins"
 REGISTRY_CONTAINER="task2-evidence-registry"
 JENKINS_URL="http://localhost:18080"
 JENKINS_USER="admin"
-JENKINS_PASSWORD="task2-local-evidence"
+JENKINS_PASSWORD="${JENKINS_PASSWORD:-$(openssl rand -hex 24)}"
 JOB_NAME="task2-handover"
 
 mkdir -p "${EVIDENCE_DIR}/artifacts" "${EVIDENCE_DIR}/screenshots"
