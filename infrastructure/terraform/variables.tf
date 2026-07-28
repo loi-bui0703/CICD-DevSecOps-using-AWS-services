@@ -39,3 +39,31 @@ variable "container_port" {
   type        = number
   default     = 8080
 }
+
+variable "staging_desired_count" {
+  description = "Initial staging task count. Keep 0 outside demos; Jenkins scales it during deployment."
+  type        = number
+  default     = 0
+
+  validation {
+    condition     = var.staging_desired_count >= 0
+    error_message = "staging_desired_count must be non-negative."
+  }
+}
+
+variable "production_desired_count" {
+  description = "Initial production task count. Keep 0 outside demos; Jenkins scales it after approval."
+  type        = number
+  default     = 0
+
+  validation {
+    condition     = var.production_desired_count >= 0
+    error_message = "production_desired_count must be non-negative."
+  }
+}
+
+variable "enable_security_hub_importer" {
+  description = "Enable Security Hub and the S3-triggered Lambda ASFF importer."
+  type        = bool
+  default     = false
+}

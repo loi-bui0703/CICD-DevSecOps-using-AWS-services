@@ -1,12 +1,12 @@
 {
-  "family": "tetris-task",
+  "family": "tetris-app",
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "256",
   "memory": "512",
 
-  "executionRoleArn": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/ecsTaskExecutionRole",
-  "taskRoleArn": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/ecsTaskRole",
+  "executionRoleArn": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/devsecops-factory-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/devsecops-factory-ecs-task-role",
 
   "containerDefinitions": [
     {
@@ -34,7 +34,7 @@
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
-          "awslogs-group": "/ecs/tetris",
+          "awslogs-group": "/ecs/devsecops-factory",
           "awslogs-region": "ap-southeast-1",
           "awslogs-stream-prefix": "ecs"
         }
@@ -43,7 +43,7 @@
       "healthCheck": {
         "command": [
           "CMD-SHELL",
-          "curl -f http://localhost:8080/ || exit 1"
+          "wget -q -O /dev/null http://localhost:8080/ || exit 1"
         ],
         "interval": 30,
         "timeout": 5,
@@ -51,9 +51,25 @@
         "startPeriod": 10
       },
 
-      "readonlyRootFilesystem": false,
+      "readonlyRootFilesystem": true,
 
-      "mountPoints": [],
+      "mountPoints": [
+        {
+          "sourceVolume": "nginx-cache",
+          "containerPath": "/var/cache/nginx",
+          "readOnly": false
+        },
+        {
+          "sourceVolume": "nginx-run",
+          "containerPath": "/var/run",
+          "readOnly": false
+        },
+        {
+          "sourceVolume": "nginx-tmp",
+          "containerPath": "/tmp",
+          "readOnly": false
+        }
+      ],
       "volumesFrom": [],
 
       "linuxParameters": {
@@ -67,11 +83,15 @@
     }
   ],
 
-  "volumes": [],
+  "volumes": [
+    { "name": "nginx-cache" },
+    { "name": "nginx-run" },
+    { "name": "nginx-tmp" }
+  ],
 
   "tags": [
     { "key": "Project", "value": "devsecops-factory" },
-    { "key": "ManagedBy", "value": "manual" },
-    { "key": "Environment", "value": "staging" }
+    { "key": "ManagedBy", "value": "terraform-or-jenkins" },
+    { "key": "Environment", "value": "shared" }
   ]
 }

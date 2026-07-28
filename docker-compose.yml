@@ -1,29 +1,48 @@
-# =============================================================================
-# docker-compose.yml — ROOT (all teams co-own this file)
-#
-# Composes all three team modules into one stack.
-# Uses Docker Compose v2 `include:` to pull each team's file.
-#
-# This is the ONLY file you need to run:
-#   docker compose up -d         # start everything
-#   docker compose down          # stop everything
-#   docker compose ps            # see all services
-#
-# To run a single module:
-#   docker compose -f docker-compose.infra.yml up -d
-#   docker compose -f docker-compose.security.yml up -d
-# =============================================================================
+name: devsecops-factory
 
-# Creates the shared network first — all module's services attach to this
+# The module files remain independently runnable. `extends` assembles their
+# services without duplicating definitions or conflicting on shared resources.
+services:
+  local-registry:
+    extends:
+      file: docker-compose.infra.yml
+      service: local-registry
+
+  jenkins:
+    extends:
+      file: docker-compose.infra.yml
+      service: jenkins
+
+  sonarqube:
+    extends:
+      file: docker-compose.security.yml
+      service: sonarqube
+
+  prometheus:
+    extends:
+      file: docker-compose.obs.yml
+      service: prometheus
+
+  blackbox-exporter:
+    extends:
+      file: docker-compose.obs.yml
+      service: blackbox-exporter
+
+  grafana:
+    extends:
+      file: docker-compose.obs.yml
+      service: grafana
+
 networks:
   devsecops:
     name: ${DOCKER_NETWORK:-devsecops}
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.28.0.0/16
+    external: true
 
-# Include each module's compose file
-include:
-  - docker-compose.infra.yml       # Module 1:
-  - docker-compose.security.yml    # Module 2: 
+volumes:
+  jenkins_home:
+  registry_data:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:
+  prometheus_data:
+  grafana_data:

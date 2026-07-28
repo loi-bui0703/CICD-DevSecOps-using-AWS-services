@@ -17,9 +17,19 @@ mkdir -p "${RAW_SECRETS_DIR}"
 
 if ! command -v gitleaks >/dev/null 2>&1; then
   echo "[*] Gitleaks not found. Installing..."
-  curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v8.18.2/gitleaks_8.18.2_linux_x64.tar.gz" | tar -xz
-  chmod +x gitleaks
-  export PATH="${PATH}:$(pwd)"
+  GITLEAKS_VERSION="${GITLEAKS_VERSION:-8.18.2}"
+  case "$(uname -m)" in
+    x86_64|amd64) GITLEAKS_ARCH="x64" ;;
+    aarch64|arm64) GITLEAKS_ARCH="arm64" ;;
+    *) echo "[!] Unsupported architecture: $(uname -m)"; exit 2 ;;
+  esac
+  TOOL_BIN_DIR="${WORKSPACE:-$(pwd)}/.tools/bin"
+  mkdir -p "${TOOL_BIN_DIR}"
+  curl -fsSL \
+    "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_${GITLEAKS_ARCH}.tar.gz" \
+    | tar -xz -C "${TOOL_BIN_DIR}" gitleaks
+  chmod +x "${TOOL_BIN_DIR}/gitleaks"
+  export PATH="${TOOL_BIN_DIR}:${PATH}"
 fi
 
 set +e

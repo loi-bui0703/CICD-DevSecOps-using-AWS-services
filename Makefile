@@ -51,7 +51,7 @@ bootstrap: setup-env network-create up k3d-create k3d-configure argocd-install #
 
 setup-env: ## Copy env template if .env doesn't exist
 	@if [ ! -f .env ]; then \
-	  cp shared/contracts/env-template.env .env; \
+	  cp ci/jenkins.env.example .env; \
 	  echo "$(YELLOW).env created from template — edit it with your values$(NC)"; \
 	else \
 	  echo ".env already exists — skipping"; \
@@ -64,21 +64,21 @@ network-create: ## Create shared Docker network
 	  docker network create --driver bridge --subnet 172.28.0.0/16 devsecops
 	@echo "$(GREEN)Network 'devsecops' ready$(NC)"
 
-up: ## Start full stack (all teams)
+up: network-create ## Start full stack (all teams)
 	$(COMPOSE) up -d --remove-orphans
 	@echo "$(GREEN)Full stack started$(NC)"
 
 up-infra: network-create ## [Team 1] Start infrastructure services only
 	$(COMPOSE_INFRA) up -d --remove-orphans
-	@echo "$(GREEN)Infra services started (Jenkins, Gitea, Registry)$(NC)"
+	@echo "$(GREEN)Infra services started (Jenkins, Registry)$(NC)"
 
 up-security: network-create ## [Team 2] Start security services only
 	$(COMPOSE_SEC) up -d --remove-orphans
-	@echo "$(GREEN)Security services started (SonarQube, DefectDojo, ZAP)$(NC)"
+	@echo "$(GREEN)Security service started (SonarQube)$(NC)"
 
 up-obs: network-create ## [Team 3] Start observability services only
 	$(COMPOSE_OBS) up -d --remove-orphans
-	@echo "$(GREEN)Observability services started (Prometheus, Grafana, Loki)$(NC)"
+	@echo "$(GREEN)Observability services started (Prometheus, Grafana, Blackbox)$(NC)"
 
 down: ## Stop all services
 	$(COMPOSE) down
@@ -92,7 +92,9 @@ status: ## Show health of all services
 	@echo ""
 	@echo "$(CYAN)── Access URLs ────────────────────────────────────$(NC)"
 	@echo "  Jenkins        http://localhost:8080"
-	@echo "  Gitea          http://localhost:3000"
+	@echo "  SonarQube      http://localhost:9000"
+	@echo "  Prometheus     http://localhost:9090"
+	@echo "  Grafana        http://localhost:3000"
 	@echo "  Registry       localhost:5001"
 	@echo ""
 
@@ -110,6 +112,7 @@ k3d-create: ## Create local k3d cluster (replaces AWS EKS)
 	fi
 
 k3d-configure: ## Export kubeconfig + install ingress-nginx
+	@mkdir -p ~/.kube
 	@k3d kubeconfig get devsecops > ~/.kube/devsecops-local.kubeconfig
 	@export KUBECONFIG=~/.kube/devsecops-local.kubeconfig && \
 	  helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx --force-update && \
@@ -121,7 +124,19 @@ k3d-configure: ## Export kubeconfig + install ingress-nginx
 	@echo "$(GREEN)ingress-nginx installed on k3d$(NC)"
 
 k3d-delete: ## Delete local k3d cluster
-	k3d cluster delete devsecops
+	@if k3d cluster list 2>/dev/null | grep -q devsecops; then \
+	  k3d cluster delete devsecops; \
+	else \
+	  echo "k3d cluster 'devsecops' does not exist — skipping"; \
+	fi
+
+argocd-install: ## Install Argo CD into the active k3d context
+	@export KUBECONFIG=~/.kube/devsecops-local.kubeconfig && \
+	  kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f - && \
+	  kubectl apply -n argocd \
+	    -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml && \
+	  kubectl rollout status deployment/argocd-server -n argocd --timeout=5m
+	@echo "$(GREEN)Argo CD installed$(NC)"
 
 ##@ Build
 
@@ -132,8 +147,7 @@ build-agent: ## [Linh] Build Jenkins agent image with all security tools
 
 ##@ Cleanup
 
-clean: down k3d-delete ## Remove all containers and k3d cluster
-	docker volume prune -f
+clean: down k3d-delete ## Remove containers and the local k3d cluster
 	@echo "$(GREEN)Cleanup complete$(NC)"
 
 clean-volumes: ## Remove all Docker volumes (DATA LOSS)

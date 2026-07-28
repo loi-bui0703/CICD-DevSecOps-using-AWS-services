@@ -27,3 +27,18 @@ output "budget_name" {
   description = "The name of the AWS budget"
   value       = aws_budgets_budget.monthly_budget.name
 }
+
+output "jenkins_ci_policy_arn" {
+  description = "IAM policy to attach to the Jenkins user or role."
+  value       = aws_iam_policy.jenkins_ci.arn
+}
+
+output "ecs_task_family" {
+  description = "Task definition family consumed by the Jenkins ECS deployment stages."
+  value       = aws_ecs_task_definition.tetris.family
+}
+
+output "securityhub_importer_function_name" {
+  description = "Lambda function name when the optional Security Hub importer is enabled."
+  value       = try(aws_lambda_function.securityhub_importer[0].function_name, null)
+}

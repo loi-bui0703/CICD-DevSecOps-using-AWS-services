@@ -9,12 +9,18 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.0"
     }
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.0"
+    }
   }
 }
 
 provider "aws" {
   region = var.aws_region
 }
+
+data "aws_caller_identity" "current" {}
 
 # Generate random string for unique S3 bucket name
 resource "random_string" "suffix" {
@@ -29,13 +35,11 @@ resource "random_string" "suffix" {
 
 # AWS Budget setup to prevent cost overrun
 resource "aws_budgets_budget" "monthly_budget" {
-  name              = "${var.project_name}-monthly-budget"
-  budget_type       = "COST"
-  limit_amount      = var.budget_limit_amount
-  limit_unit        = "USD"
-  time_unit         = "MONTHLY"
-  time_period_start = "2026-01-01_00:00"
-
+  name         = "${var.project_name}-monthly-budget"
+  budget_type  = "COST"
+  limit_amount = var.budget_limit_amount
+  limit_unit   = "USD"
+  time_unit    = "MONTHLY"
   notification {
     comparison_operator        = "GREATER_THAN"
     threshold                  = 50
@@ -175,8 +179,18 @@ resource "aws_s3_bucket_lifecycle_configuration" "reports_lifecycle" {
     id     = "delete-after-30-days"
     status = "Enabled"
 
+    filter {}
+
     expiration {
       days = 30
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 30
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
     }
   }
 }
@@ -212,6 +226,195 @@ resource "aws_s3_object" "prefix_dast" {
   content_type = "application/x-directory"
 }
 
+resource "aws_s3_object" "prefix_iac" {
+  bucket       = aws_s3_bucket.security_reports.id
+  key          = "reports/iac/"
+  content_type = "application/x-directory"
+}
+
+resource "aws_s3_object" "prefix_asff" {
+  bucket       = aws_s3_bucket.security_reports.id
+  key          = "reports/asff/"
+  content_type = "application/x-directory"
+}
+
+# =============================================================================
+# AWS-05: Optional Lambda importer for AWS Security Hub
+# =============================================================================
+
+resource "aws_securityhub_account" "main" {
+  count = var.enable_security_hub_importer ? 1 : 0
+}
+
+data "archive_file" "securityhub_importer" {
+  count       = var.enable_security_hub_importer ? 1 : 0
+  type        = "zip"
+  source_file = "${path.module}/../lambda/securityhub-importer/lambda_function.py"
+  output_path = "${path.module}/.terraform/securityhub-importer.zip"
+}
+
+resource "aws_iam_role" "securityhub_importer" {
+  count = var.enable_security_hub_importer ? 1 : 0
+  name  = "${var.project_name}-securityhub-importer"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {
+        Service = "lambda.amazonaws.com"
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "securityhub_importer" {
+  count = var.enable_security_hub_importer ? 1 : 0
+  name  = "${var.project_name}-securityhub-importer"
+  role  = aws_iam_role.securityhub_importer[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "ReadSecurityReports"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
+        Resource = "${aws_s3_bucket.security_reports.arn}/*"
+      },
+      {
+        Sid      = "ImportSecurityHubFindings"
+        Effect   = "Allow"
+        Action   = ["securityhub:BatchImportFindings"]
+        Resource = "*"
+      },
+      {
+        Sid    = "WriteLambdaLogs"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "${aws_cloudwatch_log_group.securityhub_importer[0].arn}:*"
+      }
+    ]
+  })
+}
+
+resource "aws_cloudwatch_log_group" "securityhub_importer" {
+  count             = var.enable_security_hub_importer ? 1 : 0
+  name              = "/aws/lambda/${var.project_name}-securityhub-importer"
+  retention_in_days = 7
+}
+
+resource "aws_lambda_function" "securityhub_importer" {
+  count            = var.enable_security_hub_importer ? 1 : 0
+  function_name    = "${var.project_name}-securityhub-importer"
+  role             = aws_iam_role.securityhub_importer[0].arn
+  handler          = "lambda_function.lambda_handler"
+  runtime          = "python3.12"
+  filename         = data.archive_file.securityhub_importer[0].output_path
+  source_code_hash = data.archive_file.securityhub_importer[0].output_base64sha256
+  timeout          = 60
+  memory_size      = 256
+
+  environment {
+    variables = {
+      SECURITYHUB_REGION = var.aws_region
+      ASFF_SUFFIX        = "securityhub-asff.json"
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy.securityhub_importer,
+    aws_cloudwatch_log_group.securityhub_importer,
+    aws_securityhub_account.main
+  ]
+}
+
+resource "aws_lambda_permission" "allow_s3" {
+  count          = var.enable_security_hub_importer ? 1 : 0
+  statement_id   = "AllowExecutionFromS3"
+  action         = "lambda:InvokeFunction"
+  function_name  = aws_lambda_function.securityhub_importer[0].function_name
+  principal      = "s3.amazonaws.com"
+  source_arn     = aws_s3_bucket.security_reports.arn
+  source_account = data.aws_caller_identity.current.account_id
+}
+
+resource "aws_s3_bucket_notification" "securityhub_importer" {
+  bucket = aws_s3_bucket.security_reports.id
+
+  dynamic "lambda_function" {
+    for_each = var.enable_security_hub_importer ? [1] : []
+    content {
+      lambda_function_arn = aws_lambda_function.securityhub_importer[0].arn
+      events              = ["s3:ObjectCreated:*"]
+      filter_prefix       = "reports/asff/"
+      filter_suffix       = "securityhub-asff.json"
+    }
+  }
+
+  depends_on = [aws_lambda_permission.allow_s3]
+}
+
+# Attach this least-privilege policy to the Jenkins IAM principal used by CI.
+resource "aws_iam_policy" "jenkins_ci" {
+  name        = "${var.project_name}-jenkins-ci"
+  description = "Push ECR images, update ECS services, and upload security reports."
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "EcrLogin"
+        Effect   = "Allow"
+        Action   = ["ecr:GetAuthorizationToken"]
+        Resource = "*"
+      },
+      {
+        Sid    = "EcrPush"
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:CompleteLayerUpload",
+          "ecr:InitiateLayerUpload",
+          "ecr:PutImage",
+          "ecr:UploadLayerPart"
+        ]
+        Resource = aws_ecr_repository.tetris.arn
+      },
+      {
+        Sid    = "EcsDeploy"
+        Effect = "Allow"
+        Action = [
+          "ecs:DescribeServices",
+          "ecs:DescribeTaskDefinition",
+          "ecs:RegisterTaskDefinition",
+          "ecs:UpdateService"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "PassEcsRoles"
+        Effect = "Allow"
+        Action = ["iam:PassRole"]
+        Resource = [
+          aws_iam_role.ecs_execution_role.arn,
+          aws_iam_role.ecs_task_role.arn
+        ]
+      },
+      {
+        Sid      = "UploadReports"
+        Effect   = "Allow"
+        Action   = ["s3:PutObject"]
+        Resource = "${aws_s3_bucket.security_reports.arn}/reports/*"
+      }
+    ]
+  })
+}
+
 # =============================================================================
 # Networking (VPC, Subnets, Routing, and Security Groups)
 # =============================================================================
@@ -243,9 +446,9 @@ resource "aws_internet_gateway" "gw" {
 
 # Public Subnets (2 zones for High Availability)
 resource "aws_subnet" "public_1" {
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = "10.0.1.0/24"
-  availability_zone = data.aws_availability_zones.available.names[0]
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = "10.0.1.0/24"
+  availability_zone       = data.aws_availability_zones.available.names[0]
   map_public_ip_on_launch = true
 
   tags = {
@@ -254,9 +457,9 @@ resource "aws_subnet" "public_1" {
 }
 
 resource "aws_subnet" "public_2" {
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = "10.0.2.0/24"
-  availability_zone = data.aws_availability_zones.available.names[1]
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = "10.0.2.0/24"
+  availability_zone       = data.aws_availability_zones.available.names[1]
   map_public_ip_on_launch = true
 
   tags = {
@@ -493,13 +696,42 @@ resource "aws_ecs_task_definition" "tetris" {
 
   container_definitions = jsonencode([
     {
-      name      = "tetris"
-      image     = "${aws_ecr_repository.tetris.repository_url}:latest"
-      essential = true
+      name                   = "tetris"
+      image                  = "${aws_ecr_repository.tetris.repository_url}:latest"
+      essential              = true
+      user                   = "101"
+      readonlyRootFilesystem = true
       portMappings = [
         {
           containerPort = var.container_port
           hostPort      = var.container_port
+        }
+      ]
+      healthCheck = {
+        command = [
+          "CMD-SHELL",
+          "wget -q -O /dev/null http://localhost:${var.container_port}/ || exit 1"
+        ]
+        interval    = 30
+        timeout     = 5
+        retries     = 3
+        startPeriod = 10
+      }
+      mountPoints = [
+        {
+          sourceVolume  = "nginx-cache"
+          containerPath = "/var/cache/nginx"
+          readOnly      = false
+        },
+        {
+          sourceVolume  = "nginx-run"
+          containerPath = "/var/run"
+          readOnly      = false
+        },
+        {
+          sourceVolume  = "nginx-tmp"
+          containerPath = "/tmp"
+          readOnly      = false
         }
       ]
       logConfiguration = {
@@ -512,6 +744,18 @@ resource "aws_ecs_task_definition" "tetris" {
       }
     }
   ])
+
+  volume {
+    name = "nginx-cache"
+  }
+
+  volume {
+    name = "nginx-run"
+  }
+
+  volume {
+    name = "nginx-tmp"
+  }
 }
 
 # ECS Service - Staging
@@ -519,7 +763,7 @@ resource "aws_ecs_service" "staging" {
   name            = "tetris-staging"
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.tetris.arn
-  desired_count   = 1
+  desired_count   = var.staging_desired_count
 
   # Run on FARGATE_SPOT to minimize cost
   capacity_provider_strategy {
@@ -539,6 +783,15 @@ resource "aws_ecs_service" "staging" {
     container_port   = var.container_port
   }
 
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+
+  lifecycle {
+    ignore_changes = [desired_count, task_definition]
+  }
+
   depends_on = [aws_lb_listener.staging]
 }
 
@@ -547,10 +800,10 @@ resource "aws_ecs_service" "production" {
   name            = "tetris-production"
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.tetris.arn
-  desired_count   = 2 # 2 replicas for HA on Production
+  desired_count   = var.production_desired_count
 
   capacity_provider_strategy {
-    capacity_provider = "FARGATE_SPOT"
+    capacity_provider = "FARGATE"
     weight            = 100
   }
 
@@ -564,6 +817,15 @@ resource "aws_ecs_service" "production" {
     target_group_arn = aws_lb_target_group.production.arn
     container_name   = "tetris"
     container_port   = var.container_port
+  }
+
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+
+  lifecycle {
+    ignore_changes = [desired_count, task_definition]
   }
 
   depends_on = [aws_lb_listener.production]

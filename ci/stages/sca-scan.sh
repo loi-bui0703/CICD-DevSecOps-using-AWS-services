@@ -51,4 +51,19 @@ fi
 
 cp "${JSON_REPORT}" "${LEGACY_JSON_REPORT}" 2>/dev/null || true
 
+if [ "${SECURITY_MODE:-report-only}" = "enforce" ]; then
+  BLOCKING_COUNT="$(
+    jq --arg severities ",${SECURITY_BLOCK_SEVERITIES:-CRITICAL}," \
+      '[.Results[]?.Vulnerabilities[]? |
+        select(.Severity as $severity |
+          $severities | contains("," + $severity + ",")
+        )] | length' \
+      "${JSON_REPORT}"
+  )"
+  if [ "${BLOCKING_COUNT}" -gt 0 ]; then
+    echo "[!] SCA gate blocked ${BLOCKING_COUNT} finding(s) with severity ${SECURITY_BLOCK_SEVERITIES:-CRITICAL}."
+    exit 1
+  fi
+fi
+
 echo "[+] SCA scan completed."

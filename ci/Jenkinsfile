@@ -7,6 +7,10 @@ def runSecurityScript(Map config) {
   String displayName = config.name as String
   List<String> expectedReports = (config.expectedReports ?: []) as List<String>
   List<String> scanEnvironment = (config.environment ?: []) as List<String>
+  scanEnvironment += [
+    "SECURITY_MODE=${params.SECURITY_MODE}",
+    "SECURITY_BLOCK_SEVERITIES=${params.SECURITY_BLOCK_SEVERITIES}"
+  ]
 
   if (params.SECURITY_MODE == 'stub') {
     echo "[STUB] ${displayName} is disabled by SECURITY_MODE=stub."
@@ -149,10 +153,11 @@ git -c credential.helper='!f() { echo "username=${GIT_USERNAME}"; echo "password
   }
 }
 
-def deployEcsService(String serviceName, String taskFamily) {
+def deployEcsService(String serviceName, String taskFamily, String desiredCount) {
   withEnv([
     "ECS_SERVICE_NAME=${serviceName}",
-    "ECS_TASK_FAMILY=${taskFamily}"
+    "ECS_TASK_FAMILY=${taskFamily}",
+    "ECS_DESIRED_COUNT=${desiredCount}"
   ]) {
     sh '''#!/usr/bin/env bash
 set -euo pipefail
@@ -196,6 +201,7 @@ aws ecs update-service \
   --cluster "${ECS_CLUSTER}" \
   --service "${ECS_SERVICE_NAME}" \
   --task-definition "${TASK_DEFINITION_ARN}" \
+  --desired-count "${ECS_DESIRED_COUNT}" \
   --force-new-deployment \
   --output json > "${REPORT_DIR}/update-service.json"
 
@@ -250,12 +256,22 @@ pipeline {
       choices: ['stub', 'report-only', 'enforce'],
       description: 'stub skips scanners; report-only continues as UNSTABLE; enforce blocks on scanner/report failure.'
     )
+    string(
+      name: 'SECURITY_BLOCK_SEVERITIES',
+      defaultValue: 'CRITICAL',
+      description: 'Comma-separated Trivy severities that block enforce mode.'
+    )
     booleanParam(name: 'ENABLE_SAST', defaultValue: false, description: 'Run SonarQube SAST when its service and token are ready.')
     string(name: 'SONAR_HOST_URL', defaultValue: 'http://sonarqube:9000', description: 'SonarQube URL visible from Jenkins.')
     booleanParam(name: 'ENABLE_DAST', defaultValue: false, description: 'Run DAST after staging deployment.')
     string(name: 'STAGING_URL', defaultValue: '', description: 'URL consumed by the DAST script, including scheme.')
     booleanParam(name: 'ENABLE_S3_UPLOAD', defaultValue: false, description: 'Upload available security reports to S3.')
     string(name: 'SECURITY_REPORT_BUCKET', defaultValue: '', description: 'S3 bucket name supplied by Task 1.')
+    booleanParam(
+      name: 'ENABLE_SECURITY_HUB_IMPORT',
+      defaultValue: false,
+      description: 'Generate ASFF and upload it to the S3 prefix watched by the Lambda Security Hub importer.'
+    )
 
     booleanParam(name: 'ENABLE_GITOPS_UPDATE', defaultValue: false, description: 'Commit the immutable image tag to staging/production overlays.')
     string(
@@ -268,11 +284,13 @@ pipeline {
     string(name: 'RELEASE_BRANCH', defaultValue: 'main', description: 'Only this source branch can update staging or production.')
 
     booleanParam(name: 'ENABLE_ECS_DEPLOY', defaultValue: false, description: 'Register a task definition revision and update ECS services.')
-    string(name: 'ECS_CLUSTER', defaultValue: 'devsecops-factory', description: 'ECS cluster name from Task 1.')
+    string(name: 'ECS_CLUSTER', defaultValue: 'devsecops-factory-cluster', description: 'ECS cluster name from Terraform.')
     string(name: 'ECS_STAGING_SERVICE', defaultValue: 'tetris-staging', description: 'ECS staging service name.')
-    string(name: 'ECS_STAGING_TASK_FAMILY', defaultValue: 'tetris-staging', description: 'Current ECS staging task definition family.')
+    string(name: 'ECS_STAGING_TASK_FAMILY', defaultValue: 'tetris-app', description: 'Current ECS staging task definition family.')
+    string(name: 'ECS_STAGING_DESIRED_COUNT', defaultValue: '1', description: 'Number of staging tasks to run after deployment.')
     string(name: 'ECS_PRODUCTION_SERVICE', defaultValue: 'tetris-production', description: 'ECS production service name.')
-    string(name: 'ECS_PRODUCTION_TASK_FAMILY', defaultValue: 'tetris-production', description: 'Current ECS production task definition family.')
+    string(name: 'ECS_PRODUCTION_TASK_FAMILY', defaultValue: 'tetris-app', description: 'Current ECS production task definition family.')
+    string(name: 'ECS_PRODUCTION_DESIRED_COUNT', defaultValue: '2', description: 'Number of production tasks to run after approval.')
     string(name: 'ECS_CONTAINER_NAME', defaultValue: 'tetris', description: 'Container name to replace in ECS task definitions.')
 
     booleanParam(name: 'PROMOTE_PRODUCTION', defaultValue: false, description: 'Show a manual gate and promote the same immutable image to production.')
@@ -356,6 +374,15 @@ pipeline {
               if (params.ENABLE_S3_UPLOAD && !params.SECURITY_REPORT_BUCKET.trim()) {
                 error('SECURITY_REPORT_BUCKET is required when ENABLE_S3_UPLOAD=true.')
               }
+              if (params.ENABLE_SECURITY_HUB_IMPORT && !params.ENABLE_S3_UPLOAD) {
+                error('ENABLE_SECURITY_HUB_IMPORT requires ENABLE_S3_UPLOAD=true.')
+              }
+              if (params.ENABLE_SECURITY_HUB_IMPORT && params.SECURITY_MODE == 'stub') {
+                error('ENABLE_SECURITY_HUB_IMPORT requires real security scans.')
+              }
+              if (!(params.SECURITY_BLOCK_SEVERITIES ==~ /^(CRITICAL|HIGH|MEDIUM|LOW)(,(CRITICAL|HIGH|MEDIUM|LOW))*$/)) {
+                error('SECURITY_BLOCK_SEVERITIES must be a comma-separated severity list.')
+              }
               if (params.ENABLE_GITOPS_UPDATE && (
                 !params.GITOPS_REPO_URL.trim() ||
                 !params.GITOPS_BRANCH.trim() ||
@@ -373,6 +400,14 @@ pipeline {
                 !params.ECS_CONTAINER_NAME.trim()
               )) {
                 error('ECS cluster, staging service, task family, and container name are required.')
+              }
+              [
+                staging: params.ECS_STAGING_DESIRED_COUNT,
+                production: params.ECS_PRODUCTION_DESIRED_COUNT
+              ].each { String environmentName, String desiredCount ->
+                if (!(desiredCount ==~ /^\d+$/)) {
+                  error("ECS ${environmentName} desired count must be a non-negative integer.")
+                }
               }
               if (params.PROMOTE_PRODUCTION &&
                 !params.ENABLE_GITOPS_UPDATE &&
@@ -483,10 +518,7 @@ release_branch=${releaseBranch}
               runSecurityScript([
                 name: 'SCA scan',
                 script: 'ci/stages/sca-scan.sh',
-                expectedReports: [
-                  'scan-reports/trivy-sca-report.json',
-                  'scan-reports/trivy-sca-report.html'
-                ],
+                expectedReports: ['scan-reports/trivy-sca-report.json'],
                 environment: [
                   "SCAN_DIR=${env.TARGET_DIR}",
                   "SCAN_REPORT_DIR=${env.SCAN_REPORT_DIR}"
@@ -509,6 +541,7 @@ release_branch=${releaseBranch}
                 runSecurityScript([
                   name: 'SAST scan',
                   script: 'ci/stages/sast-scan.sh',
+                  expectedReports: ['scan-reports/sonar-issues.json'],
                   environment: [
                     "SCAN_DIR=${env.TARGET_DIR}",
                     "SONAR_HOST=${params.SONAR_HOST_URL}",
@@ -626,7 +659,11 @@ fi
           steps {
             script {
               withAwsAuth {
-                deployEcsService(params.ECS_STAGING_SERVICE, params.ECS_STAGING_TASK_FAMILY)
+                deployEcsService(
+                  params.ECS_STAGING_SERVICE,
+                  params.ECS_STAGING_TASK_FAMILY,
+                  params.ECS_STAGING_DESIRED_COUNT
+                )
               }
             }
           }
@@ -652,14 +689,54 @@ fi
                 ],
                 environment: [
                   "TARGET_URL=${params.STAGING_URL}",
-                  "REPORT_DIR=${env.SCAN_REPORT_DIR}"
+                  "REPORT_DIR=${env.SCAN_REPORT_DIR}/raw/dast",
+                  "SCAN_REPORT_DIR=${env.SCAN_REPORT_DIR}",
+                  "DAST_FAIL_ON_ALERT=${params.SECURITY_MODE == 'enforce'}"
                 ]
               ])
             }
           }
         }
 
-        stage('15. Upload Security Reports to S3') {
+        stage('15. Normalize Security Reports') {
+          when { expression { params.SECURITY_MODE != 'stub' } }
+          steps {
+            sh '''#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p "${SCAN_REPORT_DIR}/normalized"
+python3 ci/stages/normalize-reports.py \
+  --raw-dir "${SCAN_REPORT_DIR}/raw" \
+  --out "${SCAN_REPORT_DIR}/normalized/findings.json" \
+  --summary "${SCAN_REPORT_DIR}/normalized/summary.json" \
+  --app tetris \
+  --env staging \
+  --commit "${GIT_COMMIT_SHA}" \
+  --build "${BUILD_NUMBER}"
+'''
+          }
+        }
+
+        stage('16. Generate Security Hub ASFF') {
+          when { expression { params.ENABLE_SECURITY_HUB_IMPORT } }
+          steps {
+            script {
+              withAwsAuth {
+                sh '''#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p "${SCAN_REPORT_DIR}/asff"
+AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+python3 ci/stages/generate-asff.py \
+  --input "${SCAN_REPORT_DIR}/normalized/findings.json" \
+  --out "${SCAN_REPORT_DIR}/asff/securityhub-asff.json" \
+  --region "${AWS_REGION}" \
+  --account-id "${AWS_ACCOUNT_ID}"
+'''
+              }
+            }
+          }
+        }
+
+        stage('17. Upload Security Reports to S3') {
           when { expression { params.ENABLE_S3_UPLOAD } }
           steps {
             script {
@@ -685,11 +762,21 @@ upload_if_present() {
 upload_if_present secrets scan-reports/gitleaks-report.json
 upload_if_present sca scan-reports/trivy-sca-report.json
 upload_if_present sca scan-reports/trivy-sca-report.html
+upload_if_present sast scan-reports/sonar-issues.json
 upload_if_present container scan-reports/container-scan-report.json
 upload_if_present dast scan-reports/zap-report.json
 upload_if_present dast scan-reports/zap-report.html
+upload_if_present dast scan-reports/zap-report.xml
 upload_if_present iac scan-reports/checkov_report.json
 upload_if_present metadata scan-reports/security-integration-status.txt
+upload_if_present normalized scan-reports/normalized/findings.json
+upload_if_present normalized scan-reports/normalized/summary.json
+
+if [ -f scan-reports/asff/securityhub-asff.json ]; then
+  aws s3 cp scan-reports/asff/securityhub-asff.json \
+    "s3://${SECURITY_REPORT_BUCKET}/reports/asff/${BUILD_PREFIX}/securityhub-asff.json" \
+    --only-show-errors
+fi
 '''
                 }
               }
@@ -697,7 +784,7 @@ upload_if_present metadata scan-reports/security-integration-status.txt
           }
         }
 
-        stage('16. Production Approval') {
+        stage('18. Production Approval') {
           when {
             allOf {
               expression { params.PROMOTE_PRODUCTION }
@@ -725,7 +812,7 @@ upload_if_present metadata scan-reports/security-integration-status.txt
           }
         }
 
-        stage('17. Update GitOps Production') {
+        stage('19. Update GitOps Production') {
           when {
             allOf {
               expression { params.PROMOTE_PRODUCTION }
@@ -740,7 +827,7 @@ upload_if_present metadata scan-reports/security-integration-status.txt
           }
         }
 
-        stage('18. Deploy ECS Production') {
+        stage('20. Deploy ECS Production') {
           when {
             allOf {
               expression { params.PROMOTE_PRODUCTION }
@@ -751,13 +838,17 @@ upload_if_present metadata scan-reports/security-integration-status.txt
           steps {
             script {
               withAwsAuth {
-                deployEcsService(params.ECS_PRODUCTION_SERVICE, params.ECS_PRODUCTION_TASK_FAMILY)
+                deployEcsService(
+                  params.ECS_PRODUCTION_SERVICE,
+                  params.ECS_PRODUCTION_TASK_FAMILY,
+                  params.ECS_PRODUCTION_DESIRED_COUNT
+                )
               }
             }
           }
         }
 
-        stage('19. Summary') {
+        stage('21. Summary') {
           steps {
             echo """CI/CD pipeline completed.
 Source: ${env.SOURCE_BRANCH}@${env.GIT_COMMIT_SHORT}
@@ -765,6 +856,7 @@ Image: ${env.IMAGE_URI}
 Security mode: ${params.SECURITY_MODE}
 GitOps enabled: ${params.ENABLE_GITOPS_UPDATE}
 ECS enabled: ${params.ENABLE_ECS_DEPLOY}
+Security Hub import enabled: ${params.ENABLE_SECURITY_HUB_IMPORT}
 Production requested: ${params.PROMOTE_PRODUCTION}
 """
           }

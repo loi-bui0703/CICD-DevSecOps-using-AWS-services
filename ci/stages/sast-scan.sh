@@ -4,7 +4,7 @@ set -euo pipefail
 : "${SONAR_HOST:?SONAR_HOST is required}"
 : "${SONAR_TOKEN:?SONAR_TOKEN is required}"
 
-SCAN_DIR="${SCAN_DIR:-target-repo}"
+SCAN_DIR="${SCAN_DIR:-.}"
 SONAR_PROJECT_KEY="${SONAR_PROJECT_KEY:-devsecops-factory}"
 SCAN_REPORT_DIR="${SCAN_REPORT_DIR:-$(pwd)/scan-reports}"
 RAW_SAST_DIR="${SCAN_REPORT_DIR}/raw/sast"
@@ -65,6 +65,14 @@ fi
 pushd "${SCAN_DIR}" >/dev/null
 rm -rf .scannerwork
 
+QUALITY_GATE_ARGS=()
+if [ "${SECURITY_MODE:-report-only}" = "enforce" ]; then
+  QUALITY_GATE_ARGS+=(
+    "-Dsonar.qualitygate.wait=true"
+    "-Dsonar.qualitygate.timeout=300"
+  )
+fi
+
 "${SCANNER_BIN}" \
   -Dsonar.projectKey="${SONAR_PROJECT_KEY}" \
   -Dsonar.sources="." \
@@ -73,6 +81,7 @@ rm -rf .scannerwork
   -Dsonar.login="${SONAR_TOKEN}" \
   -Dsonar.projectVersion="${IMAGE_TAG:-latest}" \
   -Dsonar.scm.disabled=true \
+  "${QUALITY_GATE_ARGS[@]}" \
   "$@"
 
 popd >/dev/null

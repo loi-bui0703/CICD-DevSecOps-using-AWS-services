@@ -2,10 +2,8 @@
 set -euo pipefail
 
 REQUESTED_SCAN_DIR="${SCAN_DIR:-${1:-}}"
-if [ -n "${REQUESTED_SCAN_DIR}" ] && [ "${REQUESTED_SCAN_DIR}" != "." ]; then
+if [ -n "${REQUESTED_SCAN_DIR}" ]; then
   SCAN_DIR="${REQUESTED_SCAN_DIR}"
-elif [ -d "target-repo" ]; then
-  SCAN_DIR="target-repo"
 else
   SCAN_DIR="."
 fi
@@ -13,7 +11,7 @@ fi
 SCAN_REPORT_DIR="${SCAN_REPORT_DIR:-$(pwd)/scan-reports}"
 RAW_IAC_DIR="${SCAN_REPORT_DIR}/raw/iac"
 JSON_REPORT="${RAW_IAC_DIR}/checkov-report.json"
-LEGACY_JSON_REPORT="checkov_report.json"
+LEGACY_JSON_REPORT="${SCAN_REPORT_DIR}/checkov_report.json"
 CHECKOV_DATA_CONTAINER="checkov-data-${BUILD_NUMBER:-$$}"
 
 cleanup() {

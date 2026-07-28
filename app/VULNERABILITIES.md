@@ -8,14 +8,14 @@ Mục đích: cung cấp dữ liệu demo cho security pipeline (SCA, Container 
 ## 1. SCA — Dependency Vulnerabilities (`npm audit`)
 
 **Tool:** Trivy filesystem / `npm audit`
-**Kết quả:** 227 vulnerabilities tổng cộng
+**Kết quả sau khi nâng build tool và bỏ `gh-pages`:** 71 vulnerabilities tổng cộng
 
 | Severity | Số lượng |
 |---|---|
-| Critical | 20 |
-| High | 64 |
-| Moderate | 133 |
-| Low | 10 |
+| Critical | 0 |
+| High | 62 |
+| Moderate | 5 |
+| Low | 4 |
 
 ### Các dependency cũ chính gây findings
 
@@ -23,7 +23,7 @@ Mục đích: cung cấp dữ liệu demo cho security pipeline (SCA, Container 
 |---|---|---|
 | `react` | 16.12.0 | EOL — React 16 không còn nhận security patch |
 | `react-dom` | 16.12.0 | EOL |
-| `react-scripts` | 3.4.0 | Webpack 4 cũ, nhiều transitive CVE |
+| `react-scripts` | 5.0.1 | CRA đã maintenance mode; nên migrate sang Vite |
 | `core-js` | 2.6.11 / 3.6.4 | Deprecated, gây slowdown tới 100x theo V8 |
 | `eslint` | 6.8.0 | EOL — không còn security support |
 | `debug` | 3.2.6 | CVE: ReDoS regression (nên dùng ≥3.2.7) |
@@ -33,9 +33,10 @@ Mục đích: cung cấp dữ liệu demo cho security pipeline (SCA, Container 
 | `svgo` | 1.3.2 | Deprecated, nên dùng v2.x |
 | `rimraf` | 2.x | EOL (nên dùng v4+) |
 
-### Lý do giữ nguyên (intentional for demo)
+### Trạng thái còn lại
 
-Các dependency cũ này được **cố ý giữ lại** để:
+Logic ứng dụng gốc vẫn dùng một số dependency cũ. Các finding còn lại được giữ
+lại có chủ đích cho bài lab:
 - Tạo SCA findings thật cho pipeline demo
 - Minh hoạ security gate khi có CRITICAL vulnerability
 - Cho phép Thành viên 3 demo Trivy filesystem scan với kết quả thực tế
@@ -47,15 +48,13 @@ Các dependency cũ này được **cố ý giữ lại** để:
 ## 2. Container Scan — Base Image Vulnerabilities
 
 **Tool:** Trivy image scan
-**Image:** `node:16` (build stage) + `nginxinc/nginx-unprivileged:alpine` (runtime)
+**Image:** `node:22-alpine` (build stage) + `nginxinc/nginx-unprivileged:alpine` (runtime)
 
-### node:16 (build stage)
+### Node.js 22 (build stage)
 
 | Vấn đề | Mô tả |
 |---|---|
-| Node.js 16 EOL | End-of-life từ tháng 9/2023, không còn security update |
-| OpenSSL legacy | Node 16 dùng OpenSSL 1.1.1, cần `--openssl-legacy-provider` với Node 17+ |
-| npm 8.x | npm 8 outdated, nên dùng npm 10+ |
+| Legacy toolchain | Build runtime còn được hỗ trợ nhưng Create React App và dependency frontend vẫn cần được thay thế trước production thật |
 
 > Build stage không đưa vào runtime image — chỉ ảnh hưởng đến CI build environment.
 
@@ -92,7 +91,8 @@ Các dependency cũ này được **cố ý giữ lại** để:
 
 ## 4. Compatibility Issue — Node.js OpenSSL
 
-**Phát hiện:** `ERR_OSSL_EVP_UNSUPPORTED` khi chạy `npm run build` với Node.js v17+
+**Phát hiện cũ:** `ERR_OSSL_EVP_UNSUPPORTED` khi chạy `react-scripts@3.4.0`
+với Node.js dùng OpenSSL 3.
 
 **Nguyên nhân:**
 - `react-scripts@3.4.0` (năm 2020) dùng **webpack 4** gọi thuật toán hash MD4
@@ -105,10 +105,10 @@ code: 'ERR_OSSL_EVP_UNSUPPORTED'
 Node.js v22.12.0
 ```
 
-**Fix đã áp dụng (Môi trường local):**
-Không nâng cấp `react-scripts` để phục vụ demo quét lỗi. Thay vào đó, hạ cấp Node.js xuống v16 bằng công cụ quản lý phiên bản (ví dụ NVM):
+**Fix đã áp dụng:**
+Không hạ Node.js xuống bản EOL và không bật legacy crypto provider. Build tool
+đã được nâng lên `react-scripts@5.0.1`:
 ```bash
-nvm use 16
 npm run build
 ```
 
@@ -119,7 +119,7 @@ Compiled successfully.
   5.21 KB   build/static/js/main.ee726c3e.chunk.js
 ```
 
-**Trong Dockerfile:** Dùng `FROM node:16 AS builder` → Node 16 dùng OpenSSL 1.1.1, không bị lỗi này nên quá trình build CI/CD hoàn toàn ổn định.
+**Trong Dockerfile:** Dùng `node:22-alpine`; runtime chỉ chứa Nginx.
 
 ---
 
@@ -128,18 +128,19 @@ Compiled successfully.
 ### Scenario 1 — SCA Gate (Trivy filesystem)
 
 ```bash
-# Scan sẽ tìm thấy CRITICAL vulnerabilities trong react-scripts dependencies
+# Scan kiểm tra các dependency còn lại
 trivy fs --exit-code 1 --severity CRITICAL ./app
 ```
-Kỳ vọng: **FAIL** — có ít nhất 20 CRITICAL findings.
+Kỳ vọng hiện tại: **FAIL** nếu finding critical còn tồn tại; xem JSON report để
+xác nhận package và fixed version thay vì dựa vào số lượng cố định.
 
 ### Scenario 2 — Container Scan Gate (Trivy image)
 
 ```bash
-# Scan image build từ node:16
+# Scan image runtime và build artifacts
 trivy image --exit-code 1 --severity CRITICAL devsecops/tetris:local
 ```
-Kỳ vọng: **cảnh báo** về node:16 EOL và các CVE trong alpine packages.
+Kỳ vọng: Trivy báo các CVE còn tồn tại trong dependency hoặc Alpine packages.
 
 ### Scenario 3 — Build Compatibility Gate
 
@@ -154,7 +155,7 @@ Nếu Jenkins agent dùng Node 18+ mà không set `NODE_OPTIONS`:
 | Vấn đề | Giải pháp đề xuất |
 |---|---|
 | React 16 EOL | Upgrade lên React 18 + react-scripts 5.x |
-| node:16 EOL | Dùng `node:20-alpine` cho build stage |
+| Legacy CRA/Webpack | Migrate sang Vite và bỏ `--openssl-legacy-provider` |
 | 227 npm vulnerabilities | Chạy `npm audit fix --force` sau khi test tương thích |
 | Webpack 4 OpenSSL | Upgrade react-scripts hoặc migrate sang Vite |
 | Pinned image tags | Dùng digest thay vì tag (ví dụ: `nginx@sha256:...`) |

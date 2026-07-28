@@ -1,0 +1,4 @@
+Docker version 26.1.5+dfsg1, build a72d7cd
+github.com/docker/buildx 0.13.1+ds1 0.13.1+ds1-3
+aws-cli/2.23.6 Python/3.13.5 Linux/6.12.54-linuxkit source/aarch64.debian.13
+v5.4.3
