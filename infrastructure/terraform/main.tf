@@ -721,17 +721,12 @@ resource "aws_ecs_task_definition" "tetris" {
       command = [
         "sh",
         "-c",
-        "chown -R 101:101 /var/cache/nginx /var/run /tmp"
+        "chown -R 101:101 /var/cache/nginx /tmp"
       ]
       mountPoints = [
         {
           sourceVolume  = "nginx-cache"
           containerPath = "/var/cache/nginx"
-          readOnly      = false
-        },
-        {
-          sourceVolume  = "nginx-run"
-          containerPath = "/var/run"
           readOnly      = false
         },
         {
@@ -784,11 +779,6 @@ resource "aws_ecs_task_definition" "tetris" {
           readOnly      = false
         },
         {
-          sourceVolume  = "nginx-run"
-          containerPath = "/var/run"
-          readOnly      = false
-        },
-        {
           sourceVolume  = "nginx-tmp"
           containerPath = "/tmp"
           readOnly      = false
@@ -807,10 +797,6 @@ resource "aws_ecs_task_definition" "tetris" {
 
   volume {
     name = "nginx-cache"
-  }
-
-  volume {
-    name = "nginx-run"
   }
 
   volume {
