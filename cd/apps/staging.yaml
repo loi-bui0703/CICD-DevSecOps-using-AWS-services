@@ -1,13 +1,5 @@
----
-# =============================================================================
-# ArgoCD Application — Synchronizes Kubernetes manifest to cluster
-# =============================================================================
-
-# We can consider this file is the contract for argocd to have permission 
-# to mangage infrastructure of this cluster 
-
-
----
+# Argo CD continuously reconciles the staging overlay after Jenkins commits an
+# immutable image tag to the GitOps branch.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -17,7 +9,7 @@ spec:
   project: default
   
   source:
-    repoURL: https://github.com/lamelihuynh/tetris-infra.git
+    repoURL: https://github.com/loi-bui0703/FCAJ-final-project.git
     targetRevision: main
     path: kubernetes/overlays/staging
   
@@ -27,8 +19,8 @@ spec:
   
   syncPolicy:
     automated:
-      prune: true      # Delete resources not in repo
-      selfHeal: true   # Re-sync if cluster drift detected (admin edit k3d infrastructure, argocd will detect and rewrite infra from git down - only trust single source )
+      prune: true
+      selfHeal: true
     syncOptions:
       - CreateNamespace=true
     retry:

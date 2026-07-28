@@ -1,319 +1,336 @@
-# DevSecOps Factory
-**Linh = Team-1 (Infra + CI/CD + K8s), My = Team-2 (Security), Loi = Team-3 (App + Dashboard)**
-> **Local-first, cloud-after.** 
+# DevSecOps Factory on AWS
 
----
+Dự án tích hợp mã nguồn của Task 1–4 thành một luồng hoàn chỉnh trên branch
+`cicd-gitops`: React Tetris → Jenkins security gates → Docker → Amazon ECR →
+ECS Fargate staging → S3/Lambda/Security Hub → manual approval → ECS Fargate
+production. Argo CD và k3d cung cấp đường GitOps local; Prometheus/Grafana cung
+cấp quan sát local, còn CloudWatch nhận log và Container Insights trên AWS.
 
-## Team ownership map
+> This repository combines Tasks 1–4 into one runnable DevSecOps workflow.
+> Vietnamese is the primary operational language; the English summary is below.
 
-| Directory / File | Owner | Branch |
-|---|---|---|
-| `infrastructure/` · `ci/Jenkinsfile` · `docker-compose.infra.yml` · `kubernetes/` · `cd/` | **Team 1 — Linh** | `team/infra` |
-| `security/` · `ci/stages/` · `docker-compose.security.yml` | **Team 2 — My** | `team/security` |
-| `app/` · `monitoring/` · `docker-compose.obs.yml` | **Team 3 — Loi** | `team/app` |
-| `shared/contracts/` · `docker-compose.yml` · `Makefile` | **All teams** | requires all reviews |
+## Kiến trúc
 
-
----
-
-## Responsibilities
-
-### Linh — Team 1 (Infrastructure + CI/CD + Kubernetes)
-- Set up local stack: Jenkins, Gitea, local registry, k3d cluster
-- Write `Jenkinsfile` (12-stage pipeline)
-- Write `Dockerfile.agent` (CI agent with all required tools)
-- Write `kubernetes/base/deployment.yaml` and Kustomize overlays for staging/production
-- Configure ArgoCD to sync staging and production
-- Write Terraform for cloud migration (AWS EKS + VPC + ECR)
-
-### My — Team 2 (Security)
-- Write 6 scan scripts in `ci/stages/`: secrets, sca, sast, container, iac, dast
-- Set up SonarQube, DefectDojo, and OWASP ZAP
-- Write Kyverno admission policies and Falco runtime rules
-- Write aggregator script to upload findings to DefectDojo
-- Define scan thresholds (CVSS score, severity level)
-
-### Loi — Team 3 (App + Dashboard)
-- Write `app/Dockerfile` (multi-stage, non-root, with `/health` endpoint)
-- Put Tetris source code into `app/src/` — **with intentional vulnerabilities for demo** (see section below)
-- Provide app spec to Linh: port, replicas, domain, env vars
-- Build Grafana dashboards: app metrics + pipeline health
-- Configure Prometheus, Loki, and Promtail
-
----
-
-## Demo vulnerabilities in the app
-
-The Tetris app contains **intentional vulnerabilities** so each security stage has findings to show during the demo. See `app/VULNERABILITIES.md` for full details.
-
-# Example
-
-| Stage | Vulnerability | File | Severity |
-|---|---|---|---|
-| ① Secrets scan | Fake AWS key in config | `app/src/config.js` | CRITICAL |
-| ③ SCA | `lodash 4.17.4` has CVE-2019-10744 | `app/package.json` | HIGH |
-| ④ SAST | `eval(userInput)` injection | `app/src/utils.js` | HIGH |
-| ⑥ Container scan | Base image `node:14` has many CVEs | `app/Dockerfile` | CRITICAL |
-| ⑦ IaC scan | `runAsNonRoot: false` in manifest | `kubernetes/base/deployment.yaml` | MEDIUM |
-
-> Purpose: prove that each pipeline stage catches the exact type of vulnerability it is responsible for.
-
----
-
-## Quick start
-
-### Prerequisites (install once)
-
-```bash
-# macOS
-brew install docker k3d kubectl helm make git
-
-# Ubuntu
-curl -fsSL https://get.docker.com | sh
-curl -sfL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
-curl -LO "https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+```mermaid
+flowchart LR
+  A["Git commit"] --> B["Jenkins"]
+  B --> C["Secrets / SCA / SAST / IaC"]
+  C --> D["Docker build"]
+  D --> E["Container scan"]
+  E --> F["Amazon ECR"]
+  F --> G["ECS staging"]
+  F --> H["Argo CD staging (local k3d)"]
+  G --> I["OWASP ZAP DAST"]
+  H --> I
+  I --> J["Normalize reports + ASFF"]
+  J --> K["Amazon S3"]
+  K --> L["Lambda importer"]
+  L --> M["AWS Security Hub"]
+  I --> N["Manual approval"]
+  N --> O["ECS / Argo CD production"]
+  G --> P["CloudWatch"]
+  B --> Q["Prometheus + Grafana (local)"]
 ```
 
-### Clone and run
+## Phần đã tích hợp
+
+| Phạm vi | Thành phần chính |
+|---|---|
+| Task 1 – AWS | Terraform cho Budget, IAM, ECR, VPC, ALB, ECS Fargate, S3, CloudWatch và Lambda/Security Hub tùy chọn |
+| Task 2 – CI/CD | Jenkins pipeline 21 stage, ECR, ECS, GitOps, S3, production approval và immutable SHA tag |
+| Task 3 – Security | Gitleaks, Trivy, SonarQube, Checkov, ZAP, schema report thống nhất và ASFF |
+| Task 4 – App | React app, multi-stage Dockerfile, hardened Kustomize overlays và ECS task-definition mẫu |
+| Hoàn thiện chung | Compose thống nhất, Prometheus/Grafana/Blackbox, test report pipeline, validation và cleanup scripts |
+
+## Chạy local
+
+Yêu cầu: Docker Desktop/Engine, `make`, `kubectl`, Python 3 và tối thiểu 8 GB
+RAM khả dụng nếu chạy cả Jenkins lẫn SonarQube.
 
 ```bash
-git clone https://github.com/lamelihuynh/devsecops-factory.git
-cd devsecops-factory
-
-# First time: copies env template and starts everything
-make bootstrap
-```
-
-`make bootstrap` does:
-1. Copies `shared/contracts/env-template.env` → `.env`
-2. Creates shared Docker network
-3. `docker compose up -d` (all 3 team modules)
-4. Creates k3d cluster and connects it to local registry
-5. Installs ingress-nginx and ArgoCD on the cluster
-
-### Check everything is running
-
-```bash
+make setup-env
+# Sửa .env và thay toàn bộ giá trị change-me-before-use.
+make up
 make status
 ```
 
----
+Các URL mặc định:
 
-## Access URLs
+- Jenkins: <http://localhost:8080>
+- SonarQube: <http://localhost:9000>
+- Prometheus: <http://localhost:9090>
+- Grafana: <http://localhost:3000>
+- Docker Registry: `localhost:5001`
 
-| Service | URL | Default credentials | Owner |
-|---|---|---|---|
-| Jenkins | http://localhost:8080 | admin / admin123 | Linh |
-| Gitea | http://localhost:3000 | set on first visit | Linh |
-| Registry | localhost:5001 | — | Linh |
-| ArgoCD | https://localhost:8443 | admin / see `make argocd-install` | Linh |
-
-
-**Change all passwords in `.env` before sharing access with teammates.**
-
----
-
-## How the 3 members work in parallel
-
-### The contract rule
-
-The `shared/contracts/` folder is the **only** interface between teams. It defines:
-- `ports.yaml` — every service port (no hardcoding anywhere else)
-- `image-names.yaml` — registry URL + image name convention
-- `env-template.env` — which env vars each team fills in
-
-Any change to `shared/contracts/` requires a PR approved by **all members**.
-
-### Git workflow
-
-```
-main  ←── PR (requires CODEOWNERS review) ←── team/infra     (Linh)
-      ←── PR (requires CODEOWNERS review) ←── team/security  (My)
-      ←── PR (requires CODEOWNERS review) ←── team/app       (Loi)
-```
-
-### Running each module independently
+Chạy riêng từng lớp:
 
 ```bash
-# Linh — Team 1
 make up-infra
-
-# My — Team 2 (needs network from Team 1 first)
-docker network create devsecops
 make up-security
-
-# Loi — Team 3
 make up-obs
 ```
 
-### Full parallel startup
+## GitOps local với k3d
 
 ```bash
-make up          # starts all 3 modules together
-```
-
-Docker Compose `include:` assembles `docker-compose.infra.yml` + `docker-compose.security.yml` + `docker-compose.obs.yml` into one stack. Each team only touches their own file.
-
----
-
-## Project structure
-
-```
-devsecops-factory/
-│
-├── shared/contracts/              # ← ALL TEAMS READ THIS, nobody edits alone
-│   ├── ports.yaml                 # Service port registry
-│   ├── image-names.yaml           # Registry + image naming convention
-│   └── env-template.env           # .env template (each team fills their section)
-│
-├── .github/
-│   ├── CODEOWNERS                 # GitHub enforced ownership
-│   └── workflows/
-│       ├── infra-validate.yml     # Linh — Terraform + Helm + Dockerfile lint
-│       ├── security-validate.yml  # My   — do not care
-│       └── app-validate.yml       # Loi  — do not care
-│
-├── docker-compose.yml             # Root: includes all 3 team compose files
-├── docker-compose.infra.yml       # Linh: Jenkins · Gitea · Registry
-├── docker-compose.security.yml    # My:   ....
-├── docker-compose.obs.yml         # Loi:  ....
-├── Makefile                       # Unified CLI for all teams
-│
-├── infrastructure/                # ── LINH (Team 1) ──────────────────
-│   ├── k3d/cluster.yaml           # Local Kubernetes (replaces EKS)
-│   ├── terraform/                 # AWS IaC for cloud migration
-│   │   ├── modules/vpc/
-│   │   ├── modules/eks/
-│   │   └── modules/ecr/
-│   └── helm/                      # Helm values for in-cluster tools
-│       ├── jenkins/
-│       ├── argocd/
-│       └── falco/
-│
-├── ci/                            # ── LINH + MY ──────────────────────
-│   ├── Jenkinsfile                # LINH owns — pipeline orchestration
-│   ├── Dockerfile.agent           # LINH owns — CI agent image
-│   ├── jenkins-casc.yaml          # LINH owns — Jenkins config-as-code
-│   └── stages/                    # MY owns — security scan scripts
-│       ├── secrets-scan.sh
-│       ├── sca-scan.sh
-│       ├── sast-scan.sh
-│       ├── container-scan.sh
-│       ├── iac-scan.sh
-│       └── dast-scan.sh
-│
-├── kubernetes/                    # ── LINH (Team 1) — written based on Loi's spec
-│   ├── base/
-│   │   └── deployment.yaml        # Deployment + Service + Ingress
-│   └── overlays/
-│       ├── staging/
-│       │   └── kustomization.yaml
-│       └── production/
-│           └── kustomization.yaml
-│
-├── cd/                            # ── LINH 
-│   └── apps/
-│       └── argocd-apps.yaml       # ArgoCD Application CRDs
-│
-├── security/                      # ── MY  ────────────────────
-│   ├── secrets-scanning/
-│   ├── sast/
-│   ├── sca/
-│   ├── container/
-│   ├── dast/
-│   ├── runtime/
-│   └── aggregation/
-│
-├── app/                           # ── LOI (Team 3) ───────────────────
-│   ├── Dockerfile                 # multi-stage, non-root, /health endpoint
-│   ├── VULNERABILITIES.md         # Documents all intentional vulnerabilities
-│   └── src/                       # Tetris source — contains demo vulnerabilities
-│
-└── monitoring/                    # ── LOI (Team 3) ───────────────────
-    ├── prometheus.yml              (Optional)
-    ├── loki-config.yaml
-    ├── promtail-config.yaml
-    └── grafana/
-        ├── dashboards/
-        └── provisioning/
-```
-
----
-
-## Pipeline flow (end-to-end)
-
-```
-Loi pushes code to Gitea/GitHub
-    ↓
-Gitea webhook → Jenkins (Linh's pipeline)
-    ↓
-Jenkins Jenkinsfile stages:
-  ① Secrets scan        (ci/stages/secrets-scan.sh — My's script)
-  ② Build + unit tests  (npm — Linh orchestrates, Loi's app code)
-  ③ SCA                 (ci/stages/sca-scan.sh — My's script)
-  ④ SAST SonarQube      (ci/stages/sast-scan.sh — My's script)
-  ⑤ Docker build        (Linh orchestrates, Loi's Dockerfile)
-  ⑥ Container scan      (ci/stages/container-scan.sh — My's script)
-  ⑦ IaC scan            (ci/stages/iac-scan.sh — My's script)
-  ⑧ Push image → local registry
-  ⑨ Bump image tag → ArgoCD auto-syncs staging (Linh's k8s manifests)
-  ⑩ DAST ZAP vs staging (ci/stages/dast-scan.sh — My's script)
-  ⑪ Manual approval gate
-  ⑫ Promote → production (Linh's ArgoCD config)
-    ↓
-All scan results → DefectDojo (My's aggregator)
-Metrics + logs  → Prometheus + Loki → Grafana (Loi's dashboards)
-```
-# Trouble Setting
-
-**k3d cluster not pulling from local registry**
-```bash
-# Registry must be running BEFORE k3d cluster is created
-make down
-make up-infra
 make k3d-create
+make k3d-configure
+make argocd-install
+kubectl apply -f cd/apps/staging.yaml
+kubectl apply -f cd/apps/production.yaml
 ```
 
-**ArgoCD not syncing**
-```bash
-export KUBECONFIG=~/.kube/devsecops-local.kubeconfig
-kubectl get pods -n argocd
-kubectl logs -n argocd deployment/argocd-server
+Thêm vào `/etc/hosts` nếu hệ điều hành không tự ánh xạ `.localhost`:
+
+```text
+127.0.0.1 tetris-staging.localhost tetris.localhost
 ```
 
-**Port already in use**
+Argo CD đang trỏ tới repository/branch khai báo trong `cd/apps/*.yaml`. Hãy đổi
+`repoURL` nếu bản tích hợp được đẩy sang repository khác.
+
+## Jenkins
+
+Tạo Multibranch Pipeline hoặc Pipeline from SCM với script path
+`ci/Jenkinsfile`. Build mặc định an toàn cho local:
+
+- `REGISTRY_TARGET=local`
+- `SECURITY_MODE=stub`
+- các side effect AWS/GitOps mặc định tắt
+
+Jenkins dùng Docker-in-Docker cô lập trên network `devsecops`; controller không
+chạy bằng root và không gắn Docker socket của máy host. Docker engine vẫn chạy
+privileged bên trong Docker Desktop VM, vì vậy chỉ khởi động stack từ source đã
+tin cậy và dừng stack khi kết thúc demo.
+
+`ci/jenkins-job.xml` dùng bản clone local được mount read-only tại
+`/workspace/source`, phù hợp khi GitHub repository là private nhưng chưa cấp PAT
+cho Jenkins. Muốn dùng webhook/SCM trực tiếp, đổi URL trong job sang GitHub và
+gắn credential `github-token`.
+
+Luồng demo đầy đủ dùng:
+
+- `DEMO_PRESET=FULL_AWS_DEMO` khi chạy qua `scripts/demo-trigger.sh`
+- `REGISTRY_TARGET=ecr`
+- `IMAGE_PLATFORM=linux/amd64` cho ECS Fargate mặc định
+- `SECURITY_MODE=enforce`
+- `SECURITY_BLOCK_SEVERITIES=CRITICAL` (hoặc `CRITICAL,HIGH`)
+- `ENABLE_ECS_DEPLOY=true`
+- `ENABLE_DAST=true`, `DAST_GATE_MODE=report-only` và `STAGING_URL` là URL ALB staging
+- `ENABLE_S3_UPLOAD=true`
+- `ENABLE_SECURITY_HUB_IMPORT=false` trong preset; chỉ bật ở custom build nếu Terraform đã bật importer
+- `PROMOTE_PRODUCTION=true` để chờ manual approval
+
+Pipeline dùng một tag 12 ký tự từ commit SHA cho cả staging và production.
+Không ghi AWS key, GitHub token hoặc Sonar token vào repository.
+
+### Demo AWS lặp lại
+
+Jenkins checkout commit từ branch local, vì vậy hãy commit thay đổi trước khi
+demo; không cần push GitHub. Giữ named volumes để cache Jenkins history,
+Checkov, ZAP, Gitleaks và Trivy. Không dùng `docker compose down -v`.
+
 ```bash
-# Check shared/contracts/ports.yaml for the conflicting port, then free it
-lsof -i :<port>
+cd /Users/loibui/Downloads/devsecops-factory/task-2
+aws sso login --profile devsecops-factory
+docker compose -f docker-compose.infra.yml up -d --build
+
+# Đưa hai ECS service về desired count 0, không destroy Terraform:
+AWS_PROFILE_NAME=devsecops-factory make demo-reset
+
+# Tự đọc Terraform outputs và trigger preset đầy đủ:
+make demo-trigger
+
+# Chỉ kiểm tra preset/outputs, không trigger full build:
+./scripts/demo-trigger.sh --dry-run
 ```
 
-**Tetris app not accessible**
+`demo-trigger` tự điền ECR, S3 bucket, staging URL, ECS family/cluster,
+security enforce, DAST report-only và production manual gate. Script chỉ in URL
+console/gate, không in Jenkins password hoặc AWS key. Nếu Jenkins chưa biết
+parameter mới, script tự chạy một seed build local-safe trước. Khi kết thúc:
+
 ```bash
-# Add to /etc/hosts
-echo "127.0.0.1 tetris-staging.localhost" | sudo tee -a /etc/hosts
-echo "127.0.0.1 tetris.localhost"         | sudo tee -a /etc/hosts
+AWS_PROFILE_NAME=devsecops-factory make demo-reset
+docker compose -f docker-compose.infra.yml down
 ```
 
----
+## Triển khai AWS
 
-## Moving to cloud (AWS EKS)
+Không chạy `terraform apply` trước khi xem chi phí và xác nhận email Budget:
 
 ```bash
-# 1. Linh provisions AWS infrastructure
 cd infrastructure/terraform
-cp terraform.tfvars.example terraform.tfvars  # fill in AWS account details
-terraform init && terraform apply
-
-# 2. Update .env — only these 2 lines change
-REGISTRY=<account>.dkr.ecr.us-east-1.amazonaws.com
-KUBECONFIG_PATH=~/.kube/eks-cluster.kubeconfig
-
-# 3. Install same Helm charts on EKS — zero pipeline changes
-make argocd-install   # with EKS kubeconfig active
+cp terraform.tfvars.example terraform.tfvars
+terraform init
+terraform fmt -check
+terraform validate
+terraform plan -out=tfplan
+terraform apply tfplan
+terraform output
 ```
 
-`Jenkinsfile` reads `REGISTRY` and `KUBECONFIG_PATH` from env — no code changes needed.
+Các task ECS mặc định bằng `0` để tránh phí Fargate ngoài giờ demo. Jenkins sẽ
+scale chúng khi deploy, hoặc dùng:
 
----
+```bash
+scripts/scale-ecs.sh up
+scripts/scale-ecs.sh down
+```
 
+`enable_security_hub_importer=false` theo mặc định. Chỉ chuyển thành `true` nếu
+muốn bật Security Hub và Lambda S3 trigger. Gắn output
+`jenkins_ci_policy_arn` vào IAM principal của Jenkins; ưu tiên IAM role/default
+credential chain thay vì access key dài hạn.
+
+### Tắt hoàn toàn sau demo
+
+Có hai mức cleanup khác nhau:
+
+- `make demo-reset` chỉ đưa ECS staging/production về `desiredCount=0`. Cách này
+  phù hợp khi sắp demo lại, nhưng hai ALB, ECR, S3 và tài nguyên khác vẫn tồn tại
+  và một số dịch vụ vẫn có thể tính phí.
+- `terraform destroy` xoá hạ tầng AWS của dự án. Hãy dùng cách này khi kết thúc
+  buổi demo và muốn ngăn chi phí mới từ các tài nguyên đó.
+
+Quy trình dưới đây xoá ECS, ALB, ECR cùng toàn bộ image, S3 cùng report,
+CloudWatch log group, VPC, IAM Jenkins, Budget và các tài nguyên Terraform liên
+quan. S3 report, ECR image và Jenkins AWS access key sẽ không thể khôi phục.
+
+#### 1. Ngăn Jenkins tạo deployment mới và tắt local stack
+
+Đảm bảo không có Jenkins build đang chạy hoặc đang chờ nút production gate, rồi
+chạy:
+
+```bash
+cd /Users/loibui/Downloads/devsecops-factory/task-2
+
+# Chạy cả bốn lệnh là an toàn dù trước đó chỉ bật một phần stack.
+docker compose -f docker-compose.infra.yml down --remove-orphans
+docker compose -f docker-compose.security.yml down --remove-orphans
+docker compose -f docker-compose.obs.yml down --remove-orphans
+docker compose down --remove-orphans
+
+# Xoá riêng cluster Kubernetes local nếu đã tạo.
+make k3d-delete
+```
+
+Không thêm `-v` nếu muốn giữ Jenkins history, scanner cache và dữ liệu local cho
+lần demo sau. Named volume nằm trên máy cá nhân và không phát sinh phí AWS.
+
+#### 2. Đăng nhập và kiểm tra đúng AWS account
+
+```bash
+aws sso login --profile devsecops-factory
+aws sts get-caller-identity --profile devsecops-factory
+```
+
+Kiểm tra trường `Account` là account đã dùng để demo. Với môi trường hiện tại,
+Account ID phải là `585572506644` (bốn số cuối `6644`). Không tiếp tục nếu ID
+khác, vì `terraform destroy` sẽ thao tác trên account đang đăng nhập.
+
+#### 3. Xem destroy plan và xoá toàn bộ AWS project
+
+Chạy cleanup script từ thư mục gốc repository:
+
+```bash
+AWS_PROFILE=devsecops-factory \
+EXPECTED_AWS_ACCOUNT_ID=585572506644 \
+CONFIRM_AWS_CLEANUP=devsecops-factory \
+DESTROY_TERRAFORM=true \
+./scripts/cleanup-aws.sh
+```
+
+Script sẽ scale ECS về `0`, hiển thị Terraform destroy plan và chờ xác nhận.
+Đọc dòng tổng kết: plan phải có `0 to add`, `0 to change` và chỉ có tài nguyên
+`to destroy`. Nhập chính xác `yes` để tiếp tục. Có thể mất 5–15 phút vì AWS cần
+drain ECS và thu hồi network interface trước khi xoá ALB/VPC.
+
+Terraform đã bật `force_delete` cho ECR và `force_destroy` cho IAM Jenkins, nên
+image cùng access key do Jenkins dùng cũng được thu hồi. Sau khi Terraform hoàn
+tất, script deregister các revision `tetris-app` do Jenkins tạo ngoài Terraform
+và chỉ thành công khi Terraform state đã rỗng.
+
+#### 4. Kiểm tra kết quả
+
+Lệnh đầu tiên phải không in tài nguyên nào. Các lệnh AWS còn lại phải trả về
+`[]` hoặc `0`:
+
+```bash
+terraform -chdir=infrastructure/terraform state list
+
+aws elbv2 describe-load-balancers \
+  --profile devsecops-factory --region ap-southeast-1 \
+  --query "LoadBalancers[?contains(LoadBalancerName, 'devsecops-factory')].LoadBalancerName"
+
+aws ecs list-clusters \
+  --profile devsecops-factory --region ap-southeast-1 \
+  --query "clusterArns[?contains(@, 'devsecops-factory')]"
+
+aws ecs list-task-definitions \
+  --profile devsecops-factory --region ap-southeast-1 \
+  --family-prefix tetris-app --status ACTIVE \
+  --query "length(taskDefinitionArns)"
+
+aws ecr describe-repositories \
+  --profile devsecops-factory --region ap-southeast-1 \
+  --query "repositories[?contains(repositoryName, 'devsecops')].repositoryName"
+
+aws s3api list-buckets \
+  --profile devsecops-factory \
+  --query "Buckets[?starts_with(Name, 'devsecops-reports-')].Name"
+
+aws ec2 describe-vpcs \
+  --profile devsecops-factory --region ap-southeast-1 \
+  --filters Name=tag:Name,Values=devsecops-factory-vpc \
+  --query "Vpcs[].VpcId"
+
+docker ps -a --format '{{.Names}}' |
+  grep -E '^(jenkins|devsecops-docker-engine|local-registry|sonarqube|prometheus|grafana|blackbox-exporter|k3d-devsecops)' |
+  wc -l
+```
+
+AWS Cost Explorer có độ trễ, vì vậy chi phí đã phát sinh trước lúc destroy vẫn
+có thể xuất hiện sau đó. Destroy ngăn tài nguyên dự án tiếp tục tạo chi phí mới;
+nó không xoá chi phí đã sử dụng và không tác động tới tài nguyên khác trong
+account.
+
+#### 5. Chuẩn bị cho lần demo tiếp theo
+
+Sau full destroy, chạy lại Terraform `plan`/`apply` trong mục **Triển khai AWS**.
+IAM user Jenkins sẽ được tạo lại nhưng access key cũ trong `.env` đã bị thu hồi.
+Hãy tạo access key mới cho output `jenkins_ci_user_name`, cập nhật
+`AWS_ACCESS_KEY_ID` và `AWS_SECRET_ACCESS_KEY` trong `.env`, rồi khởi động
+Jenkins. Không tái sử dụng hoặc chia sẻ access key cũ.
+
+## Kiểm thử
+
+```bash
+scripts/validate.sh
+FULL_BUILD=true scripts/validate.sh
+```
+
+Script kiểm tra shell, Python report/ASFF, Kustomize, Docker Compose, JSON và
+Terraform. `FULL_BUILD=true` chạy thêm `npm ci` và build ứng dụng.
+
+## Giới hạn đã biết
+
+- Frontend giữ `react-scripts@3.4.0` và một số dependency cũ để phục vụ demo
+  SCA; xem `app/VULNERABILITIES.md`. Đây không phải baseline phù hợp cho
+  production thật.
+- Repository không chứa `.env`, Terraform state, AWS key, GitHub token hay
+  kubeconfig. Các giá trị này phải được cấp qua `.env`, Jenkins Credentials,
+  IAM role/SSO hoặc secret manager.
+- Terraform tạo hai ALB theo yêu cầu staging/production. Đây là phần có thể phát
+  sinh phí ngay cả khi ECS desired count bằng `0`.
+- Ảnh trong `results/` là bằng chứng lịch sử của từng task; kết quả tích hợp cuối
+  nên được chụp lại sau khi chạy trên tài khoản AWS đích.
+
+## English summary
+
+The integrated branch provides a local-safe stack and an opt-in AWS release
+path. Start locally with `make setup-env && make up`; validate with
+`scripts/validate.sh`. Provision AWS only after reviewing the Terraform plan.
+ECS tasks start at zero, Jenkins promotes an immutable commit-tagged image, and
+production requires manual approval. Security reports are normalized, uploaded
+to S3, and can be imported into Security Hub by an optional Lambda trigger.

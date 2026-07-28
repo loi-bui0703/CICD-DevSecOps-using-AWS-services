@@ -1,0 +1,7 @@
+security_mode=stub
+ci/stages/secrets-scan.sh=missing-or-empty
+ci/stages/sca-scan.sh=ready
+ci/stages/sast-scan.sh=ready
+ci/stages/iac-scan.sh=ready
+ci/stages/container-scan.sh=ready
+ci/stages/dast-scan.sh=ready

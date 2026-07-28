@@ -1,0 +1,11 @@
+groups:
+  - name: service-availability
+    rules:
+      - alert: DevSecOpsServiceUnavailable
+        expr: probe_success == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Service probe failed"
+          description: "Blackbox probe for {{ $labels.instance }} has failed for more than two minutes."

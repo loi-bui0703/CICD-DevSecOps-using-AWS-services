@@ -1,4 +1,4 @@
-# ci/jenkins-casc.yaml — OWNED BY TEAM 1
+# ci/jenkins-casc.yaml - Jenkins Configuration as Code for Task 2
 # Jenkins Configuration as Code (JCasC)
 # Auto-configures Jenkins on first boot — no manual UI setup.
 #
@@ -6,26 +6,37 @@
 #   http://localhost:8080/configuration-as-code/reload
 
 jenkins:
-  systemMessage: "DevSecOps Factory — Local Environment"
-  numExecutors: 0   # Build only on agents, not controller
+  systemMessage: "DevSecOps Factory - CI/CD and GitOps"
+  # docker-compose.infra.yml currently starts a single Jenkins node. Keep local
+  # builds runnable until a dedicated inbound agent is added to the stack.
+  numExecutors: 2
 
   securityRealm:
     local:
       allowsSignup: false
       users:
         - id: "admin"
-          password: "${JENKINS_ADMIN_PASS:-admin123}"
+          password: "${JENKINS_ADMIN_PASS:-change-me-before-use}"
 
   authorizationStrategy:
     loggedInUsersCanDoAnything:
       allowAnonymousRead: false
 
-  # Shared pipeline library — teams can add common functions here
   globalNodeProperties:
     - envVars:
         env:
           - key: "REGISTRY"
-            value: "${REGISTRY:-localhost:5001}"
+            value: "${REGISTRY:-local-registry:5000}"
+          - key: "REPO_NAME"
+            value: "${REPO_NAME:-devsecops/tetris}"
+          - key: "SCANNER_CACHE_DIR"
+            value: "${SCANNER_CACHE_DIR:-/var/jenkins_home/.tools/bin}"
+          - key: "AWS_REGION"
+            value: "${AWS_REGION:-ap-southeast-1}"
+          - key: "AWS_DEFAULT_REGION"
+            value: "${AWS_REGION:-ap-southeast-1}"
+          - key: "GITOPS_REPO_URL"
+            value: "${GITOPS_REPO_URL:-https://github.com/loi-bui0703/FCAJ-final-project.git}"
           - key: "SONAR_HOST"
             value: "http://sonarqube:9000"
           - key: "DEFECTDOJO_URL"
@@ -35,27 +46,46 @@ credentials:
   system:
     domainCredentials:
       - credentials:
-          # SonarQube token — Team 2 fills SONAR_TOKEN in .env
+          # Security owner supplies this token when SAST is enabled.
           - string:
               scope: GLOBAL
               id: "sonar-token"
-              secret: "${SONAR_TOKEN:-placeholder-set-in-env}"
+              secret: "${SONAR_TOKEN:-not-configured}"
               description: "SonarQube API token"
 
-          # DefectDojo API key — Team 2 fills DEFECTDOJO_API_KEY in .env
+          # Optional DefectDojo credential retained for the security integration.
           - string:
               scope: GLOBAL
               id: "defectdojo-api-key"
-              secret: "${DEFECTDOJO_API_KEY:-placeholder-set-in-env}"
+              secret: "${DEFECTDOJO_API_KEY:-not-configured}"
               description: "DefectDojo API key"
 
-          # Gitea credentials — Team 1 fills in .env
+          # Legacy Gitea credential retained for compatibility with old jobs.
           - usernamePassword:
               scope: GLOBAL
               id: "gitea-creds"
               username: "${GITEA_ADMIN_USER:-gitadmin}"
-              password: "${GITEA_ADMIN_PASS:-gitadmin123}"
+              password: "${GITEA_ADMIN_PASS:-not-configured}"
               description: "Gitea admin credentials"
+
+          # GitHub HTTPS credential. The password field contains a fine-grained
+          # token with Contents read/write permission for the GitOps repository.
+          - usernamePassword:
+              scope: GLOBAL
+              id: "github-token"
+              username: "${GITHUB_USERNAME:-x-access-token}"
+              password: "${GITHUB_TOKEN:-not-configured}"
+              description: "GitHub token for GitOps commits"
+
+          # The pipeline treats username as AWS_ACCESS_KEY_ID and password as
+          # AWS_SECRET_ACCESS_KEY. Prefer AWS_AUTH_MODE=default-chain with an IAM
+          # role in cloud environments.
+          - usernamePassword:
+              scope: GLOBAL
+              id: "aws-credentials"
+              username: "${AWS_ACCESS_KEY_ID:-not-configured}"
+              password: "${AWS_SECRET_ACCESS_KEY:-not-configured}"
+              description: "AWS access key for local Jenkins only"
 
 unclassified:
   sonarGlobalConfiguration:

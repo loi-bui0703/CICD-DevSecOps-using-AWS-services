@@ -1,56 +1,61 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-# ============================================================
-# DAST SCAN — OWASP ZAP (Full Scan Mode)
-# ============================================================
+: "${TARGET_URL:?TARGET_URL is required}"
+
+SCAN_REPORT_DIR="${SCAN_REPORT_DIR:-$(pwd)/scan-reports}"
+REPORT_DIR="${REPORT_DIR:-${SCAN_REPORT_DIR}/raw/dast}"
+JSON_REPORT="${REPORT_DIR}/zap-report.json"
+HTML_REPORT="${REPORT_DIR}/zap-report.html"
+XML_REPORT="${REPORT_DIR}/zap-report.xml"
+ZAP_DATA_CONTAINER="zap-data-${BUILD_NUMBER:-$$}"
+
+cleanup() {
+  docker rm -f "${ZAP_DATA_CONTAINER}" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
 
 echo "============================================================"
-echo "  DAST SCAN — OWASP ZAP"
-echo "  Target URL Container: staging-app-local"
-echo "  Report Directory    : ${REPORT_DIR}"
+echo "  DAST SCAN - OWASP ZAP baseline"
+echo "  Target URL : ${TARGET_URL}"
+echo "  Report dir : ${REPORT_DIR}"
 echo "============================================================"
-if [ -z "$REPORT_DIR" ]; then
-    REPORT_DIR="$(pwd)/scan-reports"
-fi
+
 mkdir -p "$REPORT_DIR"
-chmod -R 777 "$REPORT_DIR"
-
-echo "[*] Ensuring staging-app-local container is running..."
-docker ps -a --filter "name=staging-app-local"
-
-TARGET_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' staging-app-local 2>/dev/null)
-
-if [ -z "$TARGET_IP" ]; then
-    docker logs staging-app-local || echo "Could not retrieve logs for staging-app-local. Container might not be running."
-    exit 1
-fi
-TARGET_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' staging-app-local)
-
-if [ -z "$TARGET_IP" ]; then
-    echo "[!] Error: Could not determine IP address of staging-app-local container. Is it running and healthy?"
-    exit 1
-fi
-
-TARGET_URL="http://${TARGET_IP}:3000"
-echo "[*] Target App IP detected: $TARGET_IP"
-echo "[*] ZAP will scan: $TARGET_URL"
+cleanup
+docker create -v /zap/wrk --name "${ZAP_DATA_CONTAINER}" alpine:latest /bin/true >/dev/null
 
 docker run --rm \
-    --user root \
-    -v "$REPORT_DIR:/zap/wrk:rw" \
-    ghcr.io/zaproxy/zaproxy:stable \
-    zap-full-scan.py \
-    -t "$TARGET_URL" \
-    -r zap-report.html \
-    -x zap-report.xml \
-    -J zap-report.json \
-    -m 2 \
-    -T 5
+  --user root \
+  --add-host=host.docker.internal:host-gateway \
+  --network "${DOCKER_NETWORK:-bridge}" \
+  --volumes-from "${ZAP_DATA_CONTAINER}" \
+  ghcr.io/zaproxy/zaproxy:stable \
+  zap-baseline.py \
+  -t "$TARGET_URL" \
+  -r zap-report.html \
+  -x zap-report.xml \
+  -J zap-report.json \
+  -m 2 \
+  -T 10 || ZAP_EXIT=$?
 
-if [ -f "$REPORT_DIR/zap-report.html" ]; then
-    echo "[+] DAST Scan completed! Report is located at: $REPORT_DIR/zap-report.html"
-   chmod -R 777 "$REPORT_DIR"
-else
-    echo "[!] Error: ZAP finished but no report file found!"
-    exit 1
+ZAP_EXIT="${ZAP_EXIT:-0}"
+docker cp "${ZAP_DATA_CONTAINER}:/zap/wrk/." "${REPORT_DIR}/"
+
+if [ "$ZAP_EXIT" -ge 3 ]; then
+  echo "[!] ZAP runtime error"
+  exit "$ZAP_EXIT"
 fi
+
+mkdir -p "${SCAN_REPORT_DIR}"
+cp "${JSON_REPORT}" "${SCAN_REPORT_DIR}/zap-report.json" 2>/dev/null || true
+cp "${HTML_REPORT}" "${SCAN_REPORT_DIR}/zap-report.html" 2>/dev/null || true
+cp "${XML_REPORT}" "${SCAN_REPORT_DIR}/zap-report.xml" 2>/dev/null || true
+
+if [ "$ZAP_EXIT" -ge 1 ] && [ "${DAST_FAIL_ON_ALERT:-false}" = "true" ]; then
+  echo "[!] ZAP found alerts and DAST_FAIL_ON_ALERT=true"
+  exit "$ZAP_EXIT"
+fi
+
+echo "[+] DAST completed. Reports saved to $REPORT_DIR"
+exit 0

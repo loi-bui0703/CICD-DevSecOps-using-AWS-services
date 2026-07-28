@@ -1,0 +1,26 @@
+Task 2 static handover validation
+Generated: 2026-07-23T15:59:07Z
+Branch: cicd-gitops
+
+PASS | git diff has no whitespace errors
+PASS | docker-compose.infra.yml renders
+PASS | bash syntax: ci/stages/container-scan.sh
+PASS | bash syntax: ci/stages/dast-scan.sh
+PASS | bash syntax: ci/stages/iac-scan.sh
+PASS | bash syntax: ci/stages/sast-scan.sh
+PASS | bash syntax: ci/stages/sca-scan.sh
+PASS | bash syntax: ci/stages/secrets-scan.sh
+PASS | staging Argo Application has expected repo/path/namespace
+PASS | production Argo Application has expected path/namespace
+PASS | Jenkins archives security artifacts
+PASS | Jenkins uses commit SHA image tag
+PASS | Jenkins has production input gate
+PASS | production requires security enforce
+PASS | ECR login does not enable shell tracing
+PASS | kustomize staging renders
+PASS | kustomize production renders
+PASS | staging render uses namespace staging and one replica
+PASS | production render uses namespace production and three replicas
+PASS | no obvious hardcoded secret pattern in Task 2 files
+
+SUMMARY: all static Task 2 handover checks passed.

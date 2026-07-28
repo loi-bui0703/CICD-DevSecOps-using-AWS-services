@@ -1,0 +1,102 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: tetris
+  name: tetris
+  namespace: staging
+spec:
+  ports:
+  - port: 80
+    targetPort: 8080
+  selector:
+    app: tetris
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: tetris
+    managed-by: argocd
+  name: tetris
+  namespace: staging
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tetris
+  template:
+    metadata:
+      annotations:
+        prometheus.io/port: "8080"
+        prometheus.io/scrape: "true"
+      labels:
+        app: tetris
+    spec:
+      containers:
+      - image: localhost:5001/devsecops/tetris:latest
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 2
+        name: tetris
+        ports:
+        - containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 2
+        resources:
+          limits:
+            cpu: 200m
+            memory: 128Mi
+          requests:
+            cpu: 50m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: false
+        volumeMounts:
+        - mountPath: /home/node/.npm
+          name: npm-cache
+        - mountPath: /tmp
+          name: node-tmp
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      volumes:
+      - emptyDir: {}
+        name: npm-cache
+      - emptyDir: {}
+        name: node-tmp
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+  name: tetris
+  namespace: staging
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: tetris-staging.example.com
+    http:
+      paths:
+      - backend:
+          service:
+            name: tetris
+            port:
+              number: 80
+        path: /
+        pathType: Prefix

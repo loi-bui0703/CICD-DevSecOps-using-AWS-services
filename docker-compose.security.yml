@@ -30,8 +30,6 @@
 #   docker compose up -d   (from repo root, includes all modules)
 # =============================================================================
 
-version: '3.8'
-
 networks:
   devsecops:
     name: ${DOCKER_NETWORK:-devsecops}

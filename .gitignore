@@ -20,7 +20,6 @@ kubeconfig*
 *.tfstate.backup
 *.tfvars
 !*.tfvars.example
-.terraform.lock.hcl
 
 # ── Build artifacts ───────────────────────────────────────
 node_modules/
@@ -29,6 +28,8 @@ dist/
 target/
 *.jar
 *.war
+__pycache__/
+*.py[cod]
 
 # ── Security scan reports (generated, not source) ─────────
 /tmp/security-reports/
@@ -46,9 +47,10 @@ gitleaks-report.json
 .DS_Store
 Thumbs.db
 
-# ── Docker ────────────────────────────────────────────────
-.dockerignore
-
 # ── Logs ─────────────────────────────────────────────────
 *.log
 logs/
+
+# ── Terraform plans ───────────────────────────────────────
+*.tfplan
+tfplan

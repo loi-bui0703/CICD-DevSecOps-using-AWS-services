@@ -5,8 +5,9 @@ resources:
   - ../../base
 images:
   - name: tetris-devsecops
-    newName: 997961584240.dkr.ecr.ap-southeast-1.amazonaws.com/devsecops/ecr
-    newTag: latest   # Promoted by Jenkins after manual approval
+    # Jenkins replaces this local-safe default after manual approval.
+    newName: localhost:5001/devsecops/tetris
+    newTag: latest
 patches:
   - patch: |-
       - op: replace

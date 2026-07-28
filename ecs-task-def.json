@@ -1,0 +1,97 @@
+{
+  "family": "tetris-app",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+
+  "executionRoleArn": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/devsecops-factory-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/devsecops-factory-ecs-task-role",
+
+  "containerDefinitions": [
+    {
+      "name": "tetris",
+
+      "image": "<AWS_ACCOUNT_ID>.dkr.ecr.ap-southeast-1.amazonaws.com/devsecops/tetris:latest",
+
+      "essential": true,
+
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "hostPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
+
+      "environment": [
+        {
+          "name": "NGINX_PORT",
+          "value": "8080"
+        }
+      ],
+
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/devsecops-factory",
+          "awslogs-region": "ap-southeast-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "wget -q -O /dev/null http://localhost:8080/ || exit 1"
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 10
+      },
+
+      "readonlyRootFilesystem": true,
+
+      "mountPoints": [
+        {
+          "sourceVolume": "nginx-cache",
+          "containerPath": "/var/cache/nginx",
+          "readOnly": false
+        },
+        {
+          "sourceVolume": "nginx-run",
+          "containerPath": "/var/run",
+          "readOnly": false
+        },
+        {
+          "sourceVolume": "nginx-tmp",
+          "containerPath": "/tmp",
+          "readOnly": false
+        }
+      ],
+      "volumesFrom": [],
+
+      "linuxParameters": {
+        "capabilities": {
+          "drop": ["ALL"],
+          "add": []
+        }
+      },
+
+      "user": "101"
+    }
+  ],
+
+  "volumes": [
+    { "name": "nginx-cache" },
+    { "name": "nginx-run" },
+    { "name": "nginx-tmp" }
+  ],
+
+  "tags": [
+    { "key": "Project", "value": "devsecops-factory" },
+    { "key": "ManagedBy", "value": "terraform-or-jenkins" },
+    { "key": "Environment", "value": "shared" }
+  ]
+}

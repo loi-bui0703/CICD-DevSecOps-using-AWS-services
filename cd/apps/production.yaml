@@ -1,0 +1,31 @@
+# Production follows the same GitOps repository as staging. Jenkins is the only
+# component that changes this overlay, and only after the manual approval gate.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tetris-production
+  namespace: argocd
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/loi-bui0703/FCAJ-final-project.git
+    targetRevision: main
+    path: kubernetes/overlays/production
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: production
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
