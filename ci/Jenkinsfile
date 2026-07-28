@@ -226,7 +226,7 @@ pipeline {
     )
     string(
       name: 'LOCAL_REGISTRY',
-      defaultValue: 'localhost:5001',
+      defaultValue: 'local-registry:5000',
       description: 'Local Docker registry host:port.'
     )
     string(

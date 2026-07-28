@@ -26,7 +26,7 @@ jenkins:
     - envVars:
         env:
           - key: "REGISTRY"
-            value: "${REGISTRY:-localhost:5001}"
+            value: "${REGISTRY:-local-registry:5000}"
           - key: "REPO_NAME"
             value: "${REPO_NAME:-devsecops/tetris}"
           - key: "AWS_REGION"

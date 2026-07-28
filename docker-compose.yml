@@ -8,6 +8,11 @@ services:
       file: docker-compose.infra.yml
       service: local-registry
 
+  docker-engine:
+    extends:
+      file: docker-compose.infra.yml
+      service: docker-engine
+
   jenkins:
     extends:
       file: docker-compose.infra.yml
@@ -41,6 +46,7 @@ networks:
 volumes:
   jenkins_home:
   registry_data:
+  docker_data:
   sonarqube_data:
   sonarqube_extensions:
   sonarqube_logs:

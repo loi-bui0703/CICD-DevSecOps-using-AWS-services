@@ -33,6 +33,11 @@ output "jenkins_ci_policy_arn" {
   value       = aws_iam_policy.jenkins_ci.arn
 }
 
+output "jenkins_ci_user_name" {
+  description = "Dedicated local Jenkins IAM user when create_local_jenkins_user is enabled."
+  value       = try(aws_iam_user.jenkins_ci[0].name, null)
+}
+
 output "ecs_task_family" {
   description = "Task definition family consumed by the Jenkins ECS deployment stages."
   value       = aws_ecs_task_definition.tetris.family

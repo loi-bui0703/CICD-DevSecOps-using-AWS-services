@@ -415,6 +415,23 @@ resource "aws_iam_policy" "jenkins_ci" {
   })
 }
 
+resource "aws_iam_user" "jenkins_ci" {
+  count = var.create_local_jenkins_user ? 1 : 0
+
+  name = "${var.project_name}-jenkins-ci"
+
+  tags = {
+    Purpose = "Local Jenkins CI/CD"
+  }
+}
+
+resource "aws_iam_user_policy_attachment" "jenkins_ci" {
+  count = var.create_local_jenkins_user ? 1 : 0
+
+  user       = aws_iam_user.jenkins_ci[0].name
+  policy_arn = aws_iam_policy.jenkins_ci.arn
+}
+
 # =============================================================================
 # Networking (VPC, Subnets, Routing, and Security Groups)
 # =============================================================================

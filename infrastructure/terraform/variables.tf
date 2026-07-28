@@ -67,3 +67,9 @@ variable "enable_security_hub_importer" {
   type        = bool
   default     = false
 }
+
+variable "create_local_jenkins_user" {
+  description = "Create a dedicated least-privilege IAM user for a Jenkins controller running outside AWS. No access key is managed by Terraform."
+  type        = bool
+  default     = false
+}

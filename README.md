@@ -98,6 +98,16 @@ Tạo Multibranch Pipeline hoặc Pipeline from SCM với script path
 - `SECURITY_MODE=stub`
 - các side effect AWS/GitOps mặc định tắt
 
+Jenkins dùng Docker-in-Docker cô lập trên network `devsecops`; controller không
+chạy bằng root và không gắn Docker socket của máy host. Docker engine vẫn chạy
+privileged bên trong Docker Desktop VM, vì vậy chỉ khởi động stack từ source đã
+tin cậy và dừng stack khi kết thúc demo.
+
+`ci/jenkins-job.xml` dùng bản clone local được mount read-only tại
+`/workspace/source`, phù hợp khi GitHub repository là private nhưng chưa cấp PAT
+cho Jenkins. Muốn dùng webhook/SCM trực tiếp, đổi URL trong job sang GitHub và
+gắn credential `github-token`.
+
 Luồng demo đầy đủ dùng:
 
 - `REGISTRY_TARGET=ecr`

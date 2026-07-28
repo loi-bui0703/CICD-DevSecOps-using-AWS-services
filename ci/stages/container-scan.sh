@@ -18,7 +18,11 @@ mkdir -p "${RAW_CONTAINER_DIR}"
 
 if ! command -v trivy >/dev/null 2>&1; then
   echo "[*] Trivy not found. Installing..."
-  curl -sfL "https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh" | sh -s -- -b /usr/local/bin
+  TOOL_BIN_DIR="${WORKSPACE:-$(pwd)}/.tools/bin"
+  mkdir -p "${TOOL_BIN_DIR}"
+  curl -sfL "https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh" \
+    | sh -s -- -b "${TOOL_BIN_DIR}"
+  export PATH="${TOOL_BIN_DIR}:${PATH}"
 fi
 
 trivy image \
