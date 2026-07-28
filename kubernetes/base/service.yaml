@@ -1,11 +1,23 @@
+# ============================================================
+# LEGACY FILE — NOT USED
+# ============================================================
+# This file is NOT included in base/kustomization.yaml.
+# The active Service definition is inside deployment.yaml
+# (targetPort: 8080, which is correct for nginx-unprivileged).
+#
+# This file had a bug: targetPort: 80 (wrong, app runs on 8080).
+# Keeping as reference only. Can be deleted after group review.
+# ============================================================
 apiVersion: v1
 kind: Service
 metadata:
   name: tetris
+  annotations:
+    note: "legacy-not-used — see deployment.yaml for active Service"
 spec:
   selector:
     app: tetris
   ports:
     - protocol: TCP
-      port: 80           # Cổng ảo bên ngoài (để gõ trên trình duyệt)
-      targetPort: 80   # Cổng thật bên trong Pod (Node.js đang chạy)
+      port: 80
+      targetPort: 8080  # Fixed: was 80, app (nginx-unprivileged) runs on 8080

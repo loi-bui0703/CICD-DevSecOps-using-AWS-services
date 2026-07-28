@@ -5,9 +5,13 @@ resources:
   - ../../base
 images:
   - name: tetris-devsecops
-    newName: 997961584240.dkr.ecr.ap-southeast-1.amazonaws.com/devsecops/ecr
+    # TODO: Cập nhật ECR URI thật từ Thành viên 1
+    # Format: <AWS_ACCOUNT_ID>.dkr.ecr.ap-southeast-1.amazonaws.com/<REPO_NAME>
+    # Ví dụ: 997961584240.dkr.ecr.ap-southeast-1.amazonaws.com/devsecops/tetris
+    newName: 997961584240.dkr.ecr.ap-southeast-1.amazonaws.com/devsecops/tetris
     newTag: latest   # Promoted by Jenkins after manual approval
 patches:
+  # Scale production lên 3 replicas để HA
   - patch: |-
       - op: replace
         path: /spec/replicas
@@ -15,6 +19,7 @@ patches:
     target:
       kind: Deployment
       name: tetris
+  # Ingress host production
   - patch: |-
       - op: replace
         path: /spec/rules/0/host
@@ -22,6 +27,7 @@ patches:
     target:
       kind: Ingress
       name: tetris
+  # Resources cao hơn staging
   - patch: |-
       - op: replace
         path: /spec/template/spec/containers/0/resources/requests/cpu
@@ -35,6 +41,34 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/resources/limits/memory
         value: "256Mi"
+    target:
+      kind: Deployment
+      name: tetris
+  # Nginx-unprivileged cần volume writable cho cache/pid/tmp
+  # khi readOnlyRootFilesystem: true (giữ bảo mật production)
+  - patch: |-
+      - op: add
+        path: /spec/template/spec/volumes
+        value:
+          - name: nginx-cache
+            emptyDir: {}
+          - name: nginx-run
+            emptyDir: {}
+          - name: nginx-tmp
+            emptyDir: {}
+    target:
+      kind: Deployment
+      name: tetris
+  - patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts
+        value:
+          - name: nginx-cache
+            mountPath: /var/cache/nginx
+          - name: nginx-run
+            mountPath: /var/run
+          - name: nginx-tmp
+            mountPath: /tmp
     target:
       kind: Deployment
       name: tetris
