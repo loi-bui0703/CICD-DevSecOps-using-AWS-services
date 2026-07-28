@@ -1,41 +1,37 @@
 #!/usr/bin/env bash
-# ============================================================
-# CONTAINER SCAN — Trivy (Image Mode)
-#
-# Environment variables (set by Jenkinsfile stage 9):
-#   IMAGE_FULL_PATH   — full image URI, e.g. localhost:5001/devsecops/tetris:abc123
-#   SCAN_REPORT_DIR   — directory to write reports into
-# ============================================================
 set -euo pipefail
 
+: "${IMAGE_FULL_PATH:?IMAGE_FULL_PATH is required}"
+
+SCAN_REPORT_DIR="${SCAN_REPORT_DIR:-$(pwd)/scan-reports}"
+RAW_CONTAINER_DIR="${SCAN_REPORT_DIR}/raw/container"
+JSON_REPORT="${RAW_CONTAINER_DIR}/trivy-container-report.json"
+LEGACY_JSON_REPORT="${SCAN_REPORT_DIR}/container-scan-report.json"
+
 echo "============================================================"
-echo "  CONTAINER SCAN — Trivy"
+echo "  CONTAINER SCAN - Trivy image"
 echo "  Image       : ${IMAGE_FULL_PATH}"
-echo "  Report Dir  : ${SCAN_REPORT_DIR}"
+echo "  Report file : ${JSON_REPORT}"
 echo "============================================================"
 
-if ! command -v trivy &> /dev/null; then
-    echo "[*] Trivy not found. Installing..."
-    curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+mkdir -p "${RAW_CONTAINER_DIR}"
+
+if ! command -v trivy >/dev/null 2>&1; then
+  echo "[*] Trivy not found. Installing..."
+  curl -sfL "https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh" | sh -s -- -b /usr/local/bin
 fi
 
-mkdir -p "${SCAN_REPORT_DIR}"
-
-# Console output for Jenkins log readability
-echo "[*] Vulnerability summary (HIGH, CRITICAL):"
 trivy image \
-    --severity HIGH,CRITICAL \
-    --format table \
-    "${IMAGE_FULL_PATH}"
+  --severity HIGH,CRITICAL \
+  --format json \
+  --output "${JSON_REPORT}" \
+  "${IMAGE_FULL_PATH}"
 
-# JSON report — required by Jenkinsfile expectedReports check
-echo "[*] Generating JSON report..."
+cp "${JSON_REPORT}" "${LEGACY_JSON_REPORT}" 2>/dev/null || true
+
 trivy image \
-    --severity HIGH,CRITICAL \
-    --format json \
-    --output "${SCAN_REPORT_DIR}/container-scan-report.json" \
-    "${IMAGE_FULL_PATH}"
+  --severity HIGH,CRITICAL \
+  --format table \
+  "${IMAGE_FULL_PATH}"
 
-echo "============================================================"
-echo "[+] Container scan completed. Report: ${SCAN_REPORT_DIR}/container-scan-report.json"
-echo "============================================================"
+echo "[+] Container scan completed."

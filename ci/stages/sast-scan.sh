@@ -1,64 +1,90 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+: "${SONAR_HOST:?SONAR_HOST is required}"
+: "${SONAR_TOKEN:?SONAR_TOKEN is required}"
+
+SCAN_DIR="${SCAN_DIR:-target-repo}"
+SONAR_PROJECT_KEY="${SONAR_PROJECT_KEY:-devsecops-factory}"
+SCAN_REPORT_DIR="${SCAN_REPORT_DIR:-$(pwd)/scan-reports}"
+RAW_SAST_DIR="${SCAN_REPORT_DIR}/raw/sast"
+ISSUES_REPORT="${RAW_SAST_DIR}/sonar-issues.json"
+LEGACY_ISSUES_REPORT="${SCAN_REPORT_DIR}/sonar-issues.json"
+TOOL_BASE_DIR="${WORKSPACE:-$(pwd)}/security/sast"
+SCANNER_VERSION="${SONAR_SCANNER_VERSION:-5.0.1.3006}"
+SCANNER_HOME="${TOOL_BASE_DIR}/sonar-scanner"
+NODE_VERSION="${NODE_VERSION:-v22.11.0}"
+NODE_HOME="${TOOL_BASE_DIR}/nodejs"
+
 echo "============================================================"
-echo "  SAST SCAN — SonarQube"
-echo "  SonarQube host : ${SONAR_HOST}"
-echo "  Project key    : devsecops-factory"
+echo "  SAST SCAN - SonarQube"
+echo "  Sonar host  : ${SONAR_HOST}"
+echo "  Project key : ${SONAR_PROJECT_KEY}"
+echo "  Scan target : ${SCAN_DIR}"
+echo "  Report file : ${ISSUES_REPORT}"
 echo "============================================================"
 
-TOOL_BASE_DIR="${WORKSPACE}/security/sast"
-TOOL_HOME="${TOOL_BASE_DIR}/sonar-scanner"
-mkdir -p "${TOOL_BASE_DIR}"
+mkdir -p "${RAW_SAST_DIR}" "${TOOL_BASE_DIR}"
 
-# 1. --- CÀI ĐẶT SONAR SCANNER ---
-if [ ! -f "${TOOL_HOME}/bin/sonar-scanner" ]; then
-    echo "[*] Sonar Scanner not found. Downloading..."
-    curl -sSLo /tmp/sonar-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006.zip
-    unzip -o -q /tmp/sonar-scanner.zip -d "${TOOL_BASE_DIR}/"
-    mv "${TOOL_BASE_DIR}/sonar-scanner-5.0.1.3006" "${TOOL_HOME}"
+if command -v sonar-scanner >/dev/null 2>&1; then
+  SCANNER_BIN="$(command -v sonar-scanner)"
+else
+  SCANNER_BIN="${SCANNER_HOME}/bin/sonar-scanner"
+  if [ ! -x "${SCANNER_BIN}" ]; then
+    echo "[*] Sonar Scanner not found. Installing..."
+    curl -sSLo /tmp/sonar-scanner.zip "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SCANNER_VERSION}.zip"
+    unzip -o -q /tmp/sonar-scanner.zip -d "${TOOL_BASE_DIR}"
+    rm -rf "${SCANNER_HOME}"
+    mv "${TOOL_BASE_DIR}/sonar-scanner-${SCANNER_VERSION}" "${SCANNER_HOME}"
+    chmod +x "${SCANNER_BIN}"
+  fi
 fi
-chmod +x "${TOOL_HOME}/bin/sonar-scanner"
 
-# 2. --- ÉP CÀI ĐẶT LẠI NODE.JS LÊN V22 CHO JENKINS ---
-NODE_VERSION="v22.11.0"
-NODE_DIR="${TOOL_BASE_DIR}/nodejs"
+if ! command -v node >/dev/null 2>&1; then
+  ARCH="$(uname -m)"
+  case "${ARCH}" in
+    x86_64|amd64) NODE_ARCH="linux-x64" ;;
+    aarch64|arm64) NODE_ARCH="linux-arm64" ;;
+    *) echo "[!] Unsupported architecture for Node.js install: ${ARCH}"; exit 1 ;;
+  esac
 
-echo "[*] Clearing old Node.js cache and installing Node.js ${NODE_VERSION}..."
-# Xóa thẳng tay thư mục cũ để ép tải bản mới
-rm -rf "${NODE_DIR}"
-mkdir -p "${NODE_DIR}"
+  echo "[*] Node.js not found. Installing ${NODE_VERSION} for ${NODE_ARCH}..."
+  mkdir -p "${NODE_HOME}"
+  curl -sSLo /tmp/nodejs.tar.gz "https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-${NODE_ARCH}.tar.gz"
+  tar -xzf /tmp/nodejs.tar.gz -C "${NODE_HOME}" --strip-components=1
+  export PATH="${NODE_HOME}/bin:${PATH}"
+fi
 
-curl -sSLo /tmp/nodejs.tar.gz "https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-linux-arm64.tar.gz"
-tar -xzf /tmp/nodejs.tar.gz -C "${NODE_DIR}" --strip-components=1
-
-export PATH="${NODE_DIR}/bin:$PATH"
-
-echo "[*] Node.js version:"
 node -v
 
-# 3. --- CHUẨN BỊ QUÉT ---
-echo "[*] Running scan..."
-
-SCAN_TARGET="target-repo"
-if [ -d "$SCAN_TARGET" ]; then
-    echo "[*] Navigating into $SCAN_TARGET"
-    # Di chuyển hẳn vào thư mục code để tránh lỗi path của bridge JS
-    cd "$SCAN_TARGET"
-else
-    echo "[!] target-repo not found, scanning current directory."
+if [ ! -d "${SCAN_DIR}" ]; then
+  echo "[!] Scan target not found: ${SCAN_DIR}"
+  exit 1
 fi
 
-echo "[*] Current directory is $(pwd)"
+pushd "${SCAN_DIR}" >/dev/null
+rm -rf .scannerwork
 
-# 4. --- CHẠY SCANNER TỪ BÊN TRONG THƯ MỤC CODE ---
-rm -rf .scannerwork/
-
-"${TOOL_HOME}/bin/sonar-scanner" \
-  -Dsonar.projectKey="devsecops-factory" \
-  -Dsonar.sources="app/src" \
+"${SCANNER_BIN}" \
+  -Dsonar.projectKey="${SONAR_PROJECT_KEY}" \
+  -Dsonar.sources="." \
   -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/build/**,**/.git/**" \
   -Dsonar.host.url="${SONAR_HOST}" \
   -Dsonar.login="${SONAR_TOKEN}" \
   -Dsonar.projectVersion="${IMAGE_TAG:-latest}" \
-  -Dsonar.scm.disabled=true
+  -Dsonar.scm.disabled=true \
+  "$@"
+
+popd >/dev/null
+
+echo "[*] Exporting SonarQube issues JSON..."
+if curl -fsS -u "${SONAR_TOKEN}:" \
+  "${SONAR_HOST}/api/issues/search?componentKeys=${SONAR_PROJECT_KEY}&resolved=false&ps=500" \
+  -o "${ISSUES_REPORT}"; then
+  cp "${ISSUES_REPORT}" "${LEGACY_ISSUES_REPORT}" 2>/dev/null || true
+else
+  printf '{"issues":[],"warning":"Could not export SonarQube issues from API"}\n' > "${ISSUES_REPORT}"
+  cp "${ISSUES_REPORT}" "${LEGACY_ISSUES_REPORT}" 2>/dev/null || true
+fi
+
+echo "[+] SAST scan completed."

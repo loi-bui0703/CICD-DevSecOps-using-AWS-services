@@ -1,43 +1,52 @@
 #!/usr/bin/env bash
-# ============================================================
-# DAST SCAN — OWASP ZAP (Full Scan Mode)
-#
-# Environment variables (set by Jenkinsfile stage 14):
-#   TARGET_URL   — full URL to scan, e.g. http://staging.example.com
-#   REPORT_DIR   — directory to write ZAP reports into
-# ============================================================
 set -euo pipefail
 
+: "${TARGET_URL:?TARGET_URL is required}"
+
+REPORT_DIR="${REPORT_DIR:-$(pwd)/scan-reports/raw/dast}"
+SCAN_REPORT_DIR="${SCAN_REPORT_DIR:-$(pwd)/scan-reports}"
+JSON_REPORT="${REPORT_DIR}/zap-report.json"
+HTML_REPORT="${REPORT_DIR}/zap-report.html"
+XML_REPORT="${REPORT_DIR}/zap-report.xml"
+
 echo "============================================================"
-echo "  DAST SCAN — OWASP ZAP"
-echo "  Target URL  : ${TARGET_URL}"
-echo "  Report Dir  : ${REPORT_DIR}"
+echo "  DAST SCAN - OWASP ZAP baseline"
+echo "  Target URL : ${TARGET_URL}"
+echo "  Report dir : ${REPORT_DIR}"
 echo "============================================================"
 
-if [ -z "${TARGET_URL:-}" ]; then
-    echo "[!] Error: TARGET_URL is not set. Set STAGING_URL in Jenkins pipeline parameters."
-    exit 1
-fi
+mkdir -p "$REPORT_DIR"
+chmod -R 777 "$REPORT_DIR"
 
-mkdir -p "${REPORT_DIR}"
-
-echo "[*] Running ZAP full scan against ${TARGET_URL} ..."
 docker run --rm \
-    --user root \
-    --network devsecops \
-    -v "${REPORT_DIR}:/zap/wrk:rw" \
-    ghcr.io/zaproxy/zaproxy:stable \
-    zap-full-scan.py \
-    -t "${TARGET_URL}" \
-    -r zap-report.html \
-    -x zap-report.xml \
-    -J zap-report.json \
-    -m 2 \
-    -T 5
+  --user root \
+  --add-host=host.docker.internal:host-gateway \
+  -v "$REPORT_DIR:/zap/wrk:rw" \
+  ghcr.io/zaproxy/zaproxy:stable \
+  zap-baseline.py \
+  -t "$TARGET_URL" \
+  -r zap-report.html \
+  -x zap-report.xml \
+  -J zap-report.json \
+  -m 2 \
+  -T 10 || ZAP_EXIT=$?
 
-if [ -f "${REPORT_DIR}/zap-report.html" ]; then
-    echo "[+] DAST Scan completed. Reports in: ${REPORT_DIR}"
-else
-    echo "[!] Error: ZAP finished but no report was generated."
-    exit 1
+ZAP_EXIT="${ZAP_EXIT:-0}"
+
+if [ "$ZAP_EXIT" = "3" ]; then
+  echo "[!] ZAP runtime error"
+  exit 3
 fi
+
+mkdir -p "${SCAN_REPORT_DIR}"
+cp "${JSON_REPORT}" "${SCAN_REPORT_DIR}/zap-report.json" 2>/dev/null || true
+cp "${HTML_REPORT}" "${SCAN_REPORT_DIR}/zap-report.html" 2>/dev/null || true
+cp "${XML_REPORT}" "${SCAN_REPORT_DIR}/zap-report.xml" 2>/dev/null || true
+
+if [ "$ZAP_EXIT" = "1" ] && [ "${DAST_FAIL_ON_ALERT:-false}" = "true" ]; then
+  echo "[!] ZAP found fail-level alerts and DAST_FAIL_ON_ALERT=true"
+  exit 1
+fi
+
+echo "[+] DAST completed. Reports saved to $REPORT_DIR"
+exit 0

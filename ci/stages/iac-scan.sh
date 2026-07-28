@@ -1,47 +1,62 @@
 #!/usr/bin/env bash
-# ============================================================
-# IaC SCAN — Checkov (mono-repo mode)
-#
-# Environment variables (set by Jenkinsfile stage 7):
-#   SCAN_DIR        — root of the repository (= WORKSPACE)
-#   SCAN_REPORT_DIR — directory to write the JSON report into
-# ============================================================
 set -euo pipefail
 
+REQUESTED_SCAN_DIR="${SCAN_DIR:-${1:-}}"
+if [ -n "${REQUESTED_SCAN_DIR}" ] && [ "${REQUESTED_SCAN_DIR}" != "." ]; then
+  SCAN_DIR="${REQUESTED_SCAN_DIR}"
+elif [ -d "target-repo" ]; then
+  SCAN_DIR="target-repo"
+else
+  SCAN_DIR="."
+fi
+
+SCAN_REPORT_DIR="${SCAN_REPORT_DIR:-$(pwd)/scan-reports}"
+RAW_IAC_DIR="${SCAN_REPORT_DIR}/raw/iac"
+JSON_REPORT="${RAW_IAC_DIR}/checkov-report.json"
+LEGACY_JSON_REPORT="checkov_report.json"
+CHECKOV_DATA_CONTAINER="checkov-data-${BUILD_NUMBER:-$$}"
+
+cleanup() {
+  docker rm -f "${CHECKOV_DATA_CONTAINER}" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
 echo "============================================================"
-echo "  IaC SCAN — Checkov"
+echo "  IaC SCAN - Checkov"
 echo "  Scan target : ${SCAN_DIR}"
-echo "  Report Dir  : ${SCAN_REPORT_DIR}"
+echo "  Report file : ${JSON_REPORT}"
 echo "============================================================"
 
-mkdir -p "${SCAN_REPORT_DIR}"
+mkdir -p "${RAW_IAC_DIR}"
+cleanup
 
-# Console summary (soft-fail so pipeline stages control pass/fail)
-echo "[*] Running Checkov scan (console output)..."
+echo "[*] Creating temporary scan volume..."
+docker create -v /tf --name "${CHECKOV_DATA_CONTAINER}" alpine:latest /bin/true >/dev/null
+
+echo "[*] Copying scan target into temporary volume..."
+docker cp "${SCAN_DIR}" "${CHECKOV_DATA_CONTAINER}:/tf/scan-target"
+
+echo "[*] Running Checkov summary..."
 docker run --rm \
-    -v "${SCAN_DIR}:/tf:ro" \
-    bridgecrew/checkov:latest \
-    --directory /tf \
-    --soft-fail \
-    --quiet
+  --volumes-from "${CHECKOV_DATA_CONTAINER}" \
+  bridgecrew/checkov:latest \
+  --directory /tf/scan-target \
+  --soft-fail \
+  --quiet
 
-# JSON report — required by Jenkinsfile expectedReports and S3 upload
 echo "[*] Generating JSON report..."
 docker run --rm \
-    -v "${SCAN_DIR}:/tf:ro" \
-    bridgecrew/checkov:latest \
-    --directory /tf \
-    --soft-fail \
-    --output json \
-    > "${SCAN_REPORT_DIR}/checkov_report.json"
+  --volumes-from "${CHECKOV_DATA_CONTAINER}" \
+  bridgecrew/checkov:latest \
+  --directory /tf/scan-target \
+  --soft-fail \
+  --output json > "${JSON_REPORT}"
 
-if [ -s "${SCAN_REPORT_DIR}/checkov_report.json" ]; then
-    echo "============================================================"
-    echo "[+] IaC scan completed."
-    grep -E '"passed"|"failed"|"resource_count"' \
-        "${SCAN_REPORT_DIR}/checkov_report.json" | head -n 5 || true
-    echo "============================================================"
-else
-    echo "[!] Error: Checkov report was not generated."
-    exit 1
+cp "${JSON_REPORT}" "${LEGACY_JSON_REPORT}" 2>/dev/null || true
+
+if [ ! -s "${JSON_REPORT}" ]; then
+  echo "[!] Checkov report was not generated."
+  exit 1
 fi
+
+echo "[+] IaC scan completed."
