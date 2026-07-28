@@ -31,6 +31,9 @@
 		"predeploy": "npm run build",
 		"deploy": "gh-pages -d build"
 	},
+	"engines": {
+		"node": ">=16"
+	},
 	"browserslist": [
 		">0.2%",
 		"not dead",

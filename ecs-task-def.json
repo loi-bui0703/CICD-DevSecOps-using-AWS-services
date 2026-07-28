@@ -1,0 +1,77 @@
+{
+  "family": "tetris-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+
+  "executionRoleArn": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/ecsTaskRole",
+
+  "containerDefinitions": [
+    {
+      "name": "tetris",
+
+      "image": "<AWS_ACCOUNT_ID>.dkr.ecr.ap-southeast-1.amazonaws.com/devsecops/tetris:latest",
+
+      "essential": true,
+
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "hostPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
+
+      "environment": [
+        {
+          "name": "NGINX_PORT",
+          "value": "8080"
+        }
+      ],
+
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/tetris",
+          "awslogs-region": "ap-southeast-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "curl -f http://localhost:8080/ || exit 1"
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 10
+      },
+
+      "readonlyRootFilesystem": false,
+
+      "mountPoints": [],
+      "volumesFrom": [],
+
+      "linuxParameters": {
+        "capabilities": {
+          "drop": ["ALL"],
+          "add": []
+        }
+      },
+
+      "user": "101"
+    }
+  ],
+
+  "volumes": [],
+
+  "tags": [
+    { "key": "Project", "value": "devsecops-factory" },
+    { "key": "ManagedBy", "value": "manual" },
+    { "key": "Environment", "value": "staging" }
+  ]
+}
