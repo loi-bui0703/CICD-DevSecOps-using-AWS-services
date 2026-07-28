@@ -16,13 +16,14 @@ echo "============================================================"
 
 mkdir -p "${RAW_CONTAINER_DIR}"
 
+TOOL_BIN_DIR="${SCANNER_CACHE_DIR:-${JENKINS_HOME:-${WORKSPACE:-$(pwd)}}/.tools/bin}"
+mkdir -p "${TOOL_BIN_DIR}"
+export PATH="${TOOL_BIN_DIR}:${PATH}"
+
 if ! command -v trivy >/dev/null 2>&1; then
   echo "[*] Trivy not found. Installing..."
-  TOOL_BIN_DIR="${WORKSPACE:-$(pwd)}/.tools/bin"
-  mkdir -p "${TOOL_BIN_DIR}"
   curl -sfL "https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh" \
     | sh -s -- -b "${TOOL_BIN_DIR}"
-  export PATH="${TOOL_BIN_DIR}:${PATH}"
 fi
 
 trivy image \

@@ -15,6 +15,10 @@ echo "============================================================"
 
 mkdir -p "${RAW_SECRETS_DIR}"
 
+TOOL_BIN_DIR="${SCANNER_CACHE_DIR:-${JENKINS_HOME:-${WORKSPACE:-$(pwd)}}/.tools/bin}"
+mkdir -p "${TOOL_BIN_DIR}"
+export PATH="${TOOL_BIN_DIR}:${PATH}"
+
 if ! command -v gitleaks >/dev/null 2>&1; then
   echo "[*] Gitleaks not found. Installing..."
   GITLEAKS_VERSION="${GITLEAKS_VERSION:-8.18.2}"
@@ -23,13 +27,10 @@ if ! command -v gitleaks >/dev/null 2>&1; then
     aarch64|arm64) GITLEAKS_ARCH="arm64" ;;
     *) echo "[!] Unsupported architecture: $(uname -m)"; exit 2 ;;
   esac
-  TOOL_BIN_DIR="${WORKSPACE:-$(pwd)}/.tools/bin"
-  mkdir -p "${TOOL_BIN_DIR}"
   curl -fsSL \
     "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_${GITLEAKS_ARCH}.tar.gz" \
     | tar -xz -C "${TOOL_BIN_DIR}" gitleaks
   chmod +x "${TOOL_BIN_DIR}/gitleaks"
-  export PATH="${TOOL_BIN_DIR}:${PATH}"
 fi
 
 set +e

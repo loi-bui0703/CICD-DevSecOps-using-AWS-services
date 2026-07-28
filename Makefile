@@ -17,7 +17,7 @@
 
 .PHONY: help up up-infra up-security up-obs down restart status logs \
         bootstrap k3d-create k3d-delete argocd-install \
-        build-agent setup-env clean
+        build-agent setup-env demo-reset demo-trigger clean
 
 # Load .env if it exists
 ifneq (,$(wildcard .env))
@@ -144,6 +144,14 @@ build-agent: ## [Linh] Build Jenkins agent image with all security tools
 	docker build -t devsecops-agent:latest -f ci/Dockerfile.agent .
 	docker tag devsecops-agent:latest localhost:5001/devsecops-agent:latest
 	docker push localhost:5001/devsecops-agent:latest
+
+##@ Repeatable AWS demo
+
+demo-reset: ## Scale staging and production ECS services to zero
+	./scripts/demo-reset.sh --yes
+
+demo-trigger: ## Trigger the FULL_AWS_DEMO Jenkins preset
+	./scripts/demo-trigger.sh
 
 ##@ Cleanup
 

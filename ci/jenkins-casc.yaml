@@ -29,6 +29,8 @@ jenkins:
             value: "${REGISTRY:-local-registry:5000}"
           - key: "REPO_NAME"
             value: "${REPO_NAME:-devsecops/tetris}"
+          - key: "SCANNER_CACHE_DIR"
+            value: "${SCANNER_CACHE_DIR:-/var/jenkins_home/.tools/bin}"
           - key: "AWS_REGION"
             value: "${AWS_REGION:-ap-southeast-1}"
           - key: "AWS_DEFAULT_REGION"

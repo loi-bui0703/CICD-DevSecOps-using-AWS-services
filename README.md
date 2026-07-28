@@ -110,18 +110,50 @@ gắn credential `github-token`.
 
 Luồng demo đầy đủ dùng:
 
+- `DEMO_PRESET=FULL_AWS_DEMO` khi chạy qua `scripts/demo-trigger.sh`
 - `REGISTRY_TARGET=ecr`
 - `IMAGE_PLATFORM=linux/amd64` cho ECS Fargate mặc định
 - `SECURITY_MODE=enforce`
 - `SECURITY_BLOCK_SEVERITIES=CRITICAL` (hoặc `CRITICAL,HIGH`)
 - `ENABLE_ECS_DEPLOY=true`
-- `ENABLE_DAST=true` và `STAGING_URL` là URL ALB staging
+- `ENABLE_DAST=true`, `DAST_GATE_MODE=report-only` và `STAGING_URL` là URL ALB staging
 - `ENABLE_S3_UPLOAD=true`
-- `ENABLE_SECURITY_HUB_IMPORT=true` nếu Terraform đã bật importer
+- `ENABLE_SECURITY_HUB_IMPORT=false` trong preset; chỉ bật ở custom build nếu Terraform đã bật importer
 - `PROMOTE_PRODUCTION=true` để chờ manual approval
 
 Pipeline dùng một tag 12 ký tự từ commit SHA cho cả staging và production.
 Không ghi AWS key, GitHub token hoặc Sonar token vào repository.
+
+### Demo AWS lặp lại
+
+Jenkins checkout commit từ branch local, vì vậy hãy commit thay đổi trước khi
+demo; không cần push GitHub. Giữ named volumes để cache Jenkins history,
+Checkov, ZAP, Gitleaks và Trivy. Không dùng `docker compose down -v`.
+
+```bash
+cd /Users/loibui/Downloads/devsecops-factory/task-2
+aws sso login --profile devsecops-factory
+docker compose -f docker-compose.infra.yml up -d --build
+
+# Đưa hai ECS service về desired count 0, không destroy Terraform:
+AWS_PROFILE_NAME=devsecops-factory make demo-reset
+
+# Tự đọc Terraform outputs và trigger preset đầy đủ:
+make demo-trigger
+
+# Chỉ kiểm tra preset/outputs, không trigger full build:
+./scripts/demo-trigger.sh --dry-run
+```
+
+`demo-trigger` tự điền ECR, S3 bucket, staging URL, ECS family/cluster,
+security enforce, DAST report-only và production manual gate. Script chỉ in URL
+console/gate, không in Jenkins password hoặc AWS key. Nếu Jenkins chưa biết
+parameter mới, script tự chạy một seed build local-safe trước. Khi kết thúc:
+
+```bash
+AWS_PROFILE_NAME=devsecops-factory make demo-reset
+docker compose -f docker-compose.infra.yml down
+```
 
 ## Triển khai AWS
 

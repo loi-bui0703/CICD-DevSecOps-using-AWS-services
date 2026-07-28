@@ -5,14 +5,15 @@
 def runSecurityScript(Map config) {
   String scriptPath = config.script as String
   String displayName = config.name as String
+  String scanMode = (config.mode ?: params.SECURITY_MODE ?: 'stub') as String
   List<String> expectedReports = (config.expectedReports ?: []) as List<String>
   List<String> scanEnvironment = (config.environment ?: []) as List<String>
   scanEnvironment += [
-    "SECURITY_MODE=${params.SECURITY_MODE}",
+    "SECURITY_MODE=${scanMode}",
     "SECURITY_BLOCK_SEVERITIES=${params.SECURITY_BLOCK_SEVERITIES}"
   ]
 
-  if (params.SECURITY_MODE == 'stub') {
+  if (scanMode == 'stub') {
     echo "[STUB] ${displayName} is disabled by SECURITY_MODE=stub."
     return
   }
@@ -22,7 +23,7 @@ def runSecurityScript(Map config) {
 
   if (!scriptReady) {
     String message = "${displayName} integration is not ready: ${scriptPath} is missing or empty."
-    if (params.SECURITY_MODE == 'enforce') {
+    if (scanMode == 'enforce') {
       error(message)
     }
     unstable(message)
@@ -42,7 +43,7 @@ chmod +x '${scriptPath}'
     }
   }
 
-  if (params.SECURITY_MODE == 'enforce') {
+  if (scanMode == 'enforce') {
     executeScan()
   } else {
     catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
@@ -53,7 +54,7 @@ chmod +x '${scriptPath}'
   List<String> missingReports = expectedReports.findAll { !fileExists(it) }
   if (!missingReports.isEmpty()) {
     String message = "${displayName} did not create expected report(s): ${missingReports.join(', ')}"
-    if (params.SECURITY_MODE == 'enforce') {
+    if (scanMode == 'enforce') {
       error(message)
     }
     unstable(message)
@@ -220,6 +221,11 @@ pipeline {
 
   parameters {
     choice(
+      name: 'DEMO_PRESET',
+      choices: ['CUSTOM', 'FULL_AWS_DEMO'],
+      description: 'FULL_AWS_DEMO is populated automatically by scripts/demo-trigger.sh.'
+    )
+    choice(
       name: 'REGISTRY_TARGET',
       choices: ['local', 'ecr'],
       description: 'Push to the local registry or Amazon ECR.'
@@ -269,6 +275,11 @@ pipeline {
     booleanParam(name: 'ENABLE_SAST', defaultValue: false, description: 'Run SonarQube SAST when its service and token are ready.')
     string(name: 'SONAR_HOST_URL', defaultValue: 'http://sonarqube:9000', description: 'SonarQube URL visible from Jenkins.')
     booleanParam(name: 'ENABLE_DAST', defaultValue: false, description: 'Run DAST after staging deployment.')
+    choice(
+      name: 'DAST_GATE_MODE',
+      choices: ['report-only', 'enforce'],
+      description: 'Control ZAP independently from the main security mode so production can remain enforce while DAST reports non-blocking alerts.'
+    )
     string(name: 'STAGING_URL', defaultValue: '', description: 'URL consumed by the DAST script, including scheme.')
     booleanParam(name: 'ENABLE_S3_UPLOAD', defaultValue: false, description: 'Upload available security reports to S3.')
     string(name: 'SECURITY_REPORT_BUCKET', defaultValue: '', description: 'S3 bucket name supplied by Task 1.')
@@ -361,6 +372,47 @@ pipeline {
               String repository = params.IMAGE_REPOSITORY.trim().replaceAll('^/+|/+$', '')
               String imagePlatform = (params.IMAGE_PLATFORM ?: 'linux/amd64').trim()
               String releaseBranch = params.RELEASE_BRANCH.trim()
+              String demoPreset = (params.DEMO_PRESET ?: 'CUSTOM').trim()
+              String dastGateMode = (params.DAST_GATE_MODE ?: 'report-only').trim()
+
+              if (demoPreset == 'FULL_AWS_DEMO') {
+                List<String> presetErrors = []
+                if (params.REGISTRY_TARGET != 'ecr') {
+                  presetErrors.add('REGISTRY_TARGET=ecr')
+                }
+                if (imagePlatform != 'linux/amd64') {
+                  presetErrors.add('IMAGE_PLATFORM=linux/amd64')
+                }
+                if (params.AWS_AUTH_MODE != 'jenkins-credentials') {
+                  presetErrors.add('AWS_AUTH_MODE=jenkins-credentials')
+                }
+                if (params.SECURITY_MODE != 'enforce') {
+                  presetErrors.add('SECURITY_MODE=enforce')
+                }
+                if (!params.ENABLE_DAST || dastGateMode != 'report-only') {
+                  presetErrors.add('ENABLE_DAST=true and DAST_GATE_MODE=report-only')
+                }
+                if (!params.ENABLE_S3_UPLOAD) {
+                  presetErrors.add('ENABLE_S3_UPLOAD=true')
+                }
+                if (!params.ENABLE_ECS_DEPLOY) {
+                  presetErrors.add('ENABLE_ECS_DEPLOY=true')
+                }
+                if (!params.PROMOTE_PRODUCTION) {
+                  presetErrors.add('PROMOTE_PRODUCTION=true')
+                }
+                if (params.ECS_PRODUCTION_DESIRED_COUNT != '1') {
+                  presetErrors.add('ECS_PRODUCTION_DESIRED_COUNT=1')
+                }
+                if (params.ENABLE_GITOPS_UPDATE ||
+                  params.ENABLE_SECURITY_HUB_IMPORT ||
+                  params.ENABLE_SAST) {
+                  presetErrors.add('GitOps, Security Hub import, and SAST disabled')
+                }
+                if (!presetErrors.isEmpty()) {
+                  error("FULL_AWS_DEMO preset mismatch: ${presetErrors.join('; ')}. Use scripts/demo-trigger.sh.")
+                }
+              }
 
               if (!registry) {
                 error("${params.REGISTRY_TARGET == 'ecr' ? 'ECR_REGISTRY' : 'LOCAL_REGISTRY'} is required.")
@@ -376,6 +428,9 @@ pipeline {
               }
               if (!releaseBranch) {
                 error('RELEASE_BRANCH is required.')
+              }
+              if (!(dastGateMode in ['report-only', 'enforce'])) {
+                error('DAST_GATE_MODE must be report-only or enforce.')
               }
               if (params.ENABLE_DAST && !params.STAGING_URL.trim()) {
                 error('STAGING_URL is required when ENABLE_DAST=true.')
@@ -452,6 +507,8 @@ pipeline {
               env.LATEST_IMAGE_URI = "${env.IMAGE_NAME}:latest"
               env.IS_RELEASE_BRANCH = (env.SOURCE_BRANCH == releaseBranch).toString()
               env.APPROVAL_TIMEOUT = approvalTimeout.toString()
+              env.DEMO_PRESET_EFFECTIVE = demoPreset
+              env.DAST_GATE_MODE_EFFECTIVE = dastGateMode
 
               sh '''#!/usr/bin/env bash
 set -euo pipefail
@@ -468,6 +525,8 @@ image_uri=${env.IMAGE_URI}
 image_platform=${env.IMAGE_PLATFORM}
 registry_target=${params.REGISTRY_TARGET}
 security_mode=${params.SECURITY_MODE}
+dast_gate_mode=${env.DAST_GATE_MODE_EFFECTIVE}
+demo_preset=${env.DEMO_PRESET_EFFECTIVE}
 release_branch=${releaseBranch}
 """
               )
@@ -496,6 +555,8 @@ release_branch=${releaseBranch}
                 return "${path}=${ready ? 'ready' : 'missing-or-empty'}"
               }
               statusLines.add(0, "security_mode=${params.SECURITY_MODE}")
+              statusLines.add(1, "dast_gate_mode=${env.DAST_GATE_MODE_EFFECTIVE}")
+              statusLines.add(2, "demo_preset=${env.DEMO_PRESET_EFFECTIVE}")
               writeFile(
                 file: 'scan-reports/security-integration-status.txt',
                 text: statusLines.join('\n') + '\n'
@@ -694,6 +755,8 @@ fi
               runSecurityScript([
                 name: 'DAST scan',
                 script: 'ci/stages/dast-scan.sh',
+                mode: params.SECURITY_MODE == 'enforce' ?
+                  'enforce' : env.DAST_GATE_MODE_EFFECTIVE,
                 expectedReports: [
                   'scan-reports/zap-report.html',
                   'scan-reports/zap-report.xml',
@@ -703,7 +766,7 @@ fi
                   "TARGET_URL=${params.STAGING_URL}",
                   "REPORT_DIR=${env.SCAN_REPORT_DIR}/raw/dast",
                   "SCAN_REPORT_DIR=${env.SCAN_REPORT_DIR}",
-                  "DAST_FAIL_ON_ALERT=${params.SECURITY_MODE == 'enforce'}"
+                  "DAST_FAIL_ON_ALERT=${env.DAST_GATE_MODE_EFFECTIVE == 'enforce'}"
                 ]
               ])
             }
@@ -865,7 +928,9 @@ fi
             echo """CI/CD pipeline completed.
 Source: ${env.SOURCE_BRANCH}@${env.GIT_COMMIT_SHORT}
 Image: ${env.IMAGE_URI}
+Demo preset: ${env.DEMO_PRESET_EFFECTIVE}
 Security mode: ${params.SECURITY_MODE}
+DAST gate mode: ${env.DAST_GATE_MODE_EFFECTIVE}
 GitOps enabled: ${params.ENABLE_GITOPS_UPDATE}
 ECS enabled: ${params.ENABLE_ECS_DEPLOY}
 Security Hub import enabled: ${params.ENABLE_SECURITY_HUB_IMPORT}
