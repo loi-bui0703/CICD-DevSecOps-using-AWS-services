@@ -633,11 +633,12 @@ resource "aws_lb" "staging" {
 }
 
 resource "aws_lb_target_group" "staging" {
-  name        = "${var.project_name}-tg-staging"
-  port        = var.container_port
-  protocol    = "HTTP"
-  vpc_id      = aws_vpc.main.id
-  target_type = "ip"
+  name                 = "${var.project_name}-tg-staging"
+  port                 = var.container_port
+  protocol             = "HTTP"
+  vpc_id               = aws_vpc.main.id
+  target_type          = "ip"
+  deregistration_delay = 30
 
   health_check {
     path                = "/"
@@ -675,11 +676,12 @@ resource "aws_lb" "production" {
 }
 
 resource "aws_lb_target_group" "production" {
-  name        = "${var.project_name}-tg-prod"
-  port        = var.container_port
-  protocol    = "HTTP"
-  vpc_id      = aws_vpc.main.id
-  target_type = "ip"
+  name                 = "${var.project_name}-tg-prod"
+  port                 = var.container_port
+  protocol             = "HTTP"
+  vpc_id               = aws_vpc.main.id
+  target_type          = "ip"
+  deregistration_delay = 30
 
   health_check {
     path                = "/"
