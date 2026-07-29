@@ -1,8 +1,5 @@
 # DevSecOps Factory on AWS
 
-Dự án tích hợp phần kỹ thuật của Task 1–5 trên branch `cicd-gitops` thành một
-luồng chạy được từ đầu đến cuối:
-
 ```text
 React Tetris
   -> Jenkins security gates
@@ -13,13 +10,6 @@ React Tetris
   -> manual approval
   -> ECS production + local GitOps production
 ```
-
-k3d và Argo CD cung cấp Kubernetes/GitOps local; Prometheus, Grafana và
-Blackbox Exporter quan sát hệ thống local; CloudWatch nhận log và Container
-Insights trên AWS.
-
-> This repository combines the technical scope of Tasks 1–5 into one runnable
-> DevSecOps workflow. Vietnamese is the primary operational language.
 
 ## Kiến trúc
 
@@ -44,18 +34,6 @@ flowchart LR
   B --> Q["Prometheus + Grafana (local)"]
 ```
 
-## Thành phần đã tích hợp
-
-| Phạm vi | Thành phần chính |
-|---|---|
-| Task 1 – AWS | Terraform cho Budget, IAM, ECR, VPC, ALB, ECS Fargate, S3, CloudWatch và Lambda/Security Hub |
-| Task 2 – CI/CD | Jenkins pipeline 22 stage, ECR, ECS, GitOps, S3, production approval và immutable SHA tag |
-| Task 3 – Security | Gitleaks, Trivy SCA/container, SonarQube, Checkov, ZAP, normalized findings và ASFF |
-| Task 4 – App | React app, multi-stage Dockerfile, Kustomize staging/production và ECS task-definition |
-| Task 5 – Technical | Compose, Prometheus/Grafana/Blackbox, CloudWatch, kiểm thử end-to-end, evidence và cleanup |
-
-## Chọn cách chạy
-
 | Mục tiêu | Lệnh chính |
 |---|---|
 | Chỉ kiểm tra source/config | `scripts/validate.sh` |
@@ -69,7 +47,7 @@ flowchart LR
 `make demo-trigger` mới chạy preset tích hợp đầy đủ, do đó cần Terraform outputs
 và AWS credentials hợp lệ.
 
-## Yêu cầu hệ thống
+## Yêu cầu
 
 - macOS/Linux hoặc WSL2; cấu hình hiện tại đã được kiểm chứng trên macOS với
   Docker Desktop.
@@ -102,8 +80,8 @@ python3 --version
 
 ## 1. Chuẩn bị lần đầu
 
-Luôn chạy lệnh từ thư mục `task-2`. Hai Argo CD Application local hiện theo dõi
-branch `cicd-gitops`, vì vậy hãy dùng đúng branch:
+Luôn chạy lệnh từ thư mục root. Hai Argo CD Application local hiện theo dõi
+branch `cicd-gitops`, vì vậy hãy dùng đúng branch, còn không thì modify nhé
 
 ```bash
 cd /Users/loibui/Downloads/devsecops-factory/task-2
@@ -184,6 +162,17 @@ export KUBECONFIG="$HOME/.kube/devsecops-local.kubeconfig"
 kubectl port-forward -n argocd svc/argocd-server 8443:80
 ```
 
+Username mặc định là admin, còn mật khẩu lấy từ secret Kubernetes bằng lệnh sau trên macOS:
+
+```bash
+export KUBECONFIG="$HOME/.kube/devsecops-local.kubeconfig"
+
+kubectl -n argocd get secret argocd-initial-admin-secret \
+  -o jsonpath='{.data.password}' | base64 -D
+
+echo
+```
+
 Nếu `.localhost` không được hệ điều hành tự phân giải, thêm:
 
 ```text
@@ -216,7 +205,7 @@ của React app.
 
 ## 4. Chuẩn bị hạ tầng AWS
 
-Nếu hạ tầng đã tồn tại, không apply lại mù quáng: đăng nhập và chạy
+Nếu hạ tầng đã tồn tại, không apply lại đại: đăng nhập và chạy
 `terraform plan`; kết quả mong đợi là `No changes`.
 
 ```bash
