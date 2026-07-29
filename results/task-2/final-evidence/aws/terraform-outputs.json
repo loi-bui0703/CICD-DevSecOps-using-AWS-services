@@ -1,0 +1,52 @@
+{
+  "alb_dns_production": {
+    "sensitive": false,
+    "type": "string",
+    "value": "devsecops-factory-alb-prod-2116542342.ap-southeast-1.elb.amazonaws.com"
+  },
+  "alb_dns_staging": {
+    "sensitive": false,
+    "type": "string",
+    "value": "devsecops-factory-alb-staging-1252599894.ap-southeast-1.elb.amazonaws.com"
+  },
+  "budget_name": {
+    "sensitive": false,
+    "type": "string",
+    "value": "devsecops-factory-monthly-budget"
+  },
+  "ecr_repository_url": {
+    "sensitive": false,
+    "type": "string",
+    "value": "585572506644.dkr.ecr.ap-southeast-1.amazonaws.com/devsecops/tetris"
+  },
+  "ecs_cluster_name": {
+    "sensitive": false,
+    "type": "string",
+    "value": "devsecops-factory-cluster"
+  },
+  "ecs_task_family": {
+    "sensitive": false,
+    "type": "string",
+    "value": "tetris-app"
+  },
+  "jenkins_ci_policy_arn": {
+    "sensitive": false,
+    "type": "string",
+    "value": "arn:aws:iam::585572506644:policy/devsecops-factory-jenkins-ci"
+  },
+  "jenkins_ci_user_name": {
+    "sensitive": false,
+    "type": "string",
+    "value": "devsecops-factory-jenkins-ci"
+  },
+  "s3_bucket_name": {
+    "sensitive": false,
+    "type": "string",
+    "value": "devsecops-reports-vrlcwzq4"
+  },
+  "securityhub_importer_function_name": {
+    "sensitive": false,
+    "type": "string",
+    "value": "devsecops-factory-securityhub-importer"
+  }
+}

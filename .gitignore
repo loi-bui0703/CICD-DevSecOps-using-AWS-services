@@ -19,6 +19,7 @@ kubeconfig*
 *.tfstate
 *.tfstate.backup
 *.tfvars
+.terraform.tfstate.lock.info
 !*.tfvars.example
 
 # ── Build artifacts ───────────────────────────────────────

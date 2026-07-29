@@ -1,0 +1,44 @@
+{
+    "FunctionName": "devsecops-factory-securityhub-importer",
+    "FunctionArn": "arn:aws:lambda:ap-southeast-1:585572506644:function:devsecops-factory-securityhub-importer",
+    "Runtime": "python3.12",
+    "Role": "arn:aws:iam::585572506644:role/devsecops-factory-securityhub-importer",
+    "Handler": "lambda_function.lambda_handler",
+    "CodeSize": 1116,
+    "Description": "",
+    "Timeout": 60,
+    "MemorySize": 256,
+    "LastModified": "2026-07-29T09:21:42.711+0000",
+    "CodeSha256": "vZL94k4+s806wx3NCTfDHctTSqTOFkkHDKbO5xzUalY=",
+    "Version": "$LATEST",
+    "Environment": {
+        "Variables": {
+            "ASFF_SUFFIX": "securityhub-asff.json",
+            "SECURITYHUB_REGION": "ap-southeast-1"
+        }
+    },
+    "TracingConfig": {
+        "Mode": "PassThrough"
+    },
+    "RevisionId": "03c7a1e5-483d-4f5b-a467-30b4b2b9b714",
+    "State": "Active",
+    "LastUpdateStatus": "Successful",
+    "PackageType": "Zip",
+    "Architectures": [
+        "x86_64"
+    ],
+    "EphemeralStorage": {
+        "Size": 512
+    },
+    "SnapStart": {
+        "ApplyOn": "None",
+        "OptimizationStatus": "Off"
+    },
+    "RuntimeVersionConfig": {
+        "RuntimeVersionArn": "arn:aws:lambda:ap-southeast-1::runtime:fb4a5cbb4aeb1909cf946882192e0e708d8756b3a866c3ab89a3cfcfffeca7bc"
+    },
+    "LoggingConfig": {
+        "LogFormat": "Text",
+        "LogGroup": "/aws/lambda/devsecops-factory-securityhub-importer"
+    }
+}

@@ -73,6 +73,10 @@ if [ "${SECURITY_MODE:-report-only}" = "enforce" ]; then
   )
 fi
 
+# Bash 3.2 (the default on macOS) treats an empty array expansion as unbound
+# when `set -u` is active. Disable nounset only for the scanner invocation so
+# report-only mode works consistently on macOS and Linux/Jenkins.
+set +u
 "${SCANNER_BIN}" \
   -Dsonar.projectKey="${SONAR_PROJECT_KEY}" \
   -Dsonar.sources="." \
@@ -83,6 +87,7 @@ fi
   -Dsonar.scm.disabled=true \
   "${QUALITY_GATE_ARGS[@]}" \
   "$@"
+set -u
 
 popd >/dev/null
 

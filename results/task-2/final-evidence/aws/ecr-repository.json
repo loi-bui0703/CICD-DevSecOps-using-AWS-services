@@ -1,0 +1,18 @@
+{
+    "repositories": [
+        {
+            "repositoryArn": "arn:aws:ecr:ap-southeast-1:585572506644:repository/devsecops/tetris",
+            "registryId": "585572506644",
+            "repositoryName": "devsecops/tetris",
+            "repositoryUri": "585572506644.dkr.ecr.ap-southeast-1.amazonaws.com/devsecops/tetris",
+            "createdAt": "2026-07-29T16:21:30.289000+07:00",
+            "imageTagMutability": "MUTABLE",
+            "imageScanningConfiguration": {
+                "scanOnPush": true
+            },
+            "encryptionConfiguration": {
+                "encryptionType": "AES256"
+            }
+        }
+    ]
+}
