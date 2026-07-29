@@ -19,8 +19,40 @@ volumes:
   jenkins_home:
   registry_data:
   docker_data:
+  gitops_data:
 
 services:
+
+  # Disposable local Git remote used by Jenkins and Argo CD during the offline
+  # GitOps demo. The daemon only listens on loopback on the host and on the
+  # private devsecops Docker network.
+  git-server:
+    image: devsecops-git-server:local
+    build:
+      context: .
+      dockerfile: ci/Dockerfile.git-server
+    container_name: gitops-git-server
+    restart: unless-stopped
+    command:
+      - |
+        repository=/git/devsecops.git
+        if [ ! -d "$${repository}/objects" ]; then
+          git init --bare "$${repository}"
+        fi
+        git --git-dir="$${repository}" config daemon.receivepack true
+        touch "$${repository}/git-daemon-export-ok"
+        exec git daemon \
+          --reuseaddr \
+          --base-path=/git \
+          --export-all \
+          --enable=receive-pack \
+          --verbose
+    ports:
+      - "127.0.0.1:${GITOPS_GIT_PORT:-9418}:9418"
+    volumes:
+      - gitops_data:/git
+    networks:
+      - devsecops
 
   local-registry:
     image: registry:2.8.3
@@ -109,6 +141,8 @@ services:
       - ./ci/jenkins-casc.yaml:/var/jenkins_home/casc_configs/jenkins.yaml:ro
       - ./ci/plugins.txt:/usr/share/jenkins/ref/plugins.txt:ro
     depends_on:
+      git-server:
+        condition: service_started
       local-registry:
         condition: service_healthy
       docker-engine:

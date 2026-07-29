@@ -115,7 +115,7 @@ OVERLAY_DIR="kubernetes/overlays/${GITOPS_ENVIRONMENT}"
 test -f "${OVERLAY_DIR}/kustomization.yaml"
 
 cd "${OVERLAY_DIR}"
-kustomize edit set image "tetris-devsecops=${IMAGE_URI}"
+kustomize edit set image "tetris-devsecops=${GITOPS_IMAGE_URI}"
 cd ../../..
 
 git config user.email "jenkins@localhost"
@@ -124,7 +124,7 @@ git add "${OVERLAY_DIR}/kustomization.yaml"
 '''
 
       if (sh(script: 'git diff --cached --quiet', returnStatus: true) == 0) {
-        echo "GitOps ${targetEnvironment} already points to ${env.IMAGE_URI}; no commit required."
+        echo "GitOps ${targetEnvironment} already points to ${env.GITOPS_IMAGE_URI}; no commit required."
         return
       }
 
@@ -222,8 +222,8 @@ pipeline {
   parameters {
     choice(
       name: 'DEMO_PRESET',
-      choices: ['CUSTOM', 'FULL_AWS_DEMO'],
-      description: 'FULL_AWS_DEMO is populated automatically by scripts/demo-trigger.sh.'
+      choices: ['CUSTOM', 'FULL_AWS_DEMO', 'FULL_PROJECT_DEMO'],
+      description: 'FULL_PROJECT_DEMO runs AWS, security, and local GitOps integrations together.'
     )
     choice(
       name: 'REGISTRY_TARGET',
@@ -234,6 +234,16 @@ pipeline {
       name: 'LOCAL_REGISTRY',
       defaultValue: 'local-registry:5000',
       description: 'Local Docker registry host:port.'
+    )
+    booleanParam(
+      name: 'ENABLE_LOCAL_GITOPS_MIRROR',
+      defaultValue: false,
+      description: 'Mirror the scanned ECR image to the local registry for the k3d/Argo CD demo.'
+    )
+    string(
+      name: 'GITOPS_IMAGE_REGISTRY',
+      defaultValue: 'localhost:5001',
+      description: 'Registry address written to Kustomize when the local GitOps mirror is enabled.'
     )
     string(
       name: 'ECR_REGISTRY',
@@ -375,7 +385,7 @@ pipeline {
               String demoPreset = (params.DEMO_PRESET ?: 'CUSTOM').trim()
               String dastGateMode = (params.DAST_GATE_MODE ?: 'report-only').trim()
 
-              if (demoPreset == 'FULL_AWS_DEMO') {
+              if (demoPreset in ['FULL_AWS_DEMO', 'FULL_PROJECT_DEMO']) {
                 List<String> presetErrors = []
                 if (params.REGISTRY_TARGET != 'ecr') {
                   presetErrors.add('REGISTRY_TARGET=ecr')
@@ -404,13 +414,23 @@ pipeline {
                 if (params.ECS_PRODUCTION_DESIRED_COUNT != '1') {
                   presetErrors.add('ECS_PRODUCTION_DESIRED_COUNT=1')
                 }
-                if (params.ENABLE_GITOPS_UPDATE ||
-                  params.ENABLE_SECURITY_HUB_IMPORT ||
-                  params.ENABLE_SAST) {
-                  presetErrors.add('GitOps, Security Hub import, and SAST disabled')
+                if (!params.ENABLE_SECURITY_HUB_IMPORT || !params.ENABLE_SAST) {
+                  presetErrors.add('ENABLE_SECURITY_HUB_IMPORT=true and ENABLE_SAST=true')
+                }
+                if (demoPreset == 'FULL_PROJECT_DEMO' && (
+                  !params.ENABLE_GITOPS_UPDATE ||
+                  !params.ENABLE_LOCAL_GITOPS_MIRROR
+                )) {
+                  presetErrors.add('ENABLE_GITOPS_UPDATE=true and ENABLE_LOCAL_GITOPS_MIRROR=true')
+                }
+                if (demoPreset == 'FULL_AWS_DEMO' && (
+                  params.ENABLE_GITOPS_UPDATE ||
+                  params.ENABLE_LOCAL_GITOPS_MIRROR
+                )) {
+                  presetErrors.add('GitOps update and local mirror disabled for FULL_AWS_DEMO')
                 }
                 if (!presetErrors.isEmpty()) {
-                  error("FULL_AWS_DEMO preset mismatch: ${presetErrors.join('; ')}. Use scripts/demo-trigger.sh.")
+                  error("${demoPreset} preset mismatch: ${presetErrors.join('; ')}. Use scripts/demo-trigger.sh.")
                 }
               }
 
@@ -419,6 +439,14 @@ pipeline {
               }
               if (registry.contains('://') || registry.endsWith('/')) {
                 error('Registry must be a host name without scheme or trailing slash.')
+              }
+              String gitOpsImageRegistry = params.GITOPS_IMAGE_REGISTRY.trim()
+              if (params.ENABLE_LOCAL_GITOPS_MIRROR && (
+                !gitOpsImageRegistry ||
+                gitOpsImageRegistry.contains('://') ||
+                gitOpsImageRegistry.endsWith('/')
+              )) {
+                error('GITOPS_IMAGE_REGISTRY must be a host name without scheme or trailing slash.')
               }
               if (!repository) {
                 error('IMAGE_REPOSITORY is required.')
@@ -453,6 +481,9 @@ pipeline {
                 !params.GIT_CREDENTIALS_ID.trim()
               )) {
                 error('GitOps repo URL, branch, and credential ID are required.')
+              }
+              if (params.ENABLE_LOCAL_GITOPS_MIRROR && !params.ENABLE_GITOPS_UPDATE) {
+                error('ENABLE_LOCAL_GITOPS_MIRROR requires ENABLE_GITOPS_UPDATE=true.')
               }
               if (params.ENABLE_ECS_DEPLOY && params.REGISTRY_TARGET != 'ecr') {
                 error('ENABLE_ECS_DEPLOY requires REGISTRY_TARGET=ecr.')
@@ -505,6 +536,10 @@ pipeline {
               env.IMAGE_TAG = env.GIT_COMMIT_SHORT
               env.IMAGE_URI = "${env.IMAGE_NAME}:${env.IMAGE_TAG}"
               env.LATEST_IMAGE_URI = "${env.IMAGE_NAME}:latest"
+              env.LOCAL_MIRROR_IMAGE_URI = "${params.LOCAL_REGISTRY.trim()}/${repository}:${env.IMAGE_TAG}"
+              env.GITOPS_IMAGE_URI = params.ENABLE_LOCAL_GITOPS_MIRROR ?
+                "${gitOpsImageRegistry}/${repository}:${env.IMAGE_TAG}" :
+                env.IMAGE_URI
               env.IS_RELEASE_BRANCH = (env.SOURCE_BRANCH == releaseBranch).toString()
               env.APPROVAL_TIMEOUT = approvalTimeout.toString()
               env.DEMO_PRESET_EFFECTIVE = demoPreset
@@ -522,6 +557,7 @@ test -f app/package.json
                 text: """source_branch=${env.SOURCE_BRANCH}
 source_commit=${env.GIT_COMMIT_SHA}
 image_uri=${env.IMAGE_URI}
+gitops_image_uri=${env.GITOPS_IMAGE_URI}
 image_platform=${env.IMAGE_PLATFORM}
 registry_target=${params.REGISTRY_TARGET}
 security_mode=${params.SECURITY_MODE}
@@ -708,7 +744,24 @@ fi
           }
         }
 
-        stage('12. Update GitOps Staging') {
+        stage('12. Mirror Image for Local GitOps') {
+          when {
+            allOf {
+              expression { params.ENABLE_LOCAL_GITOPS_MIRROR }
+              expression { env.IS_RELEASE_BRANCH == 'true' }
+            }
+          }
+          steps {
+            sh '''#!/usr/bin/env bash
+set -euo pipefail
+docker tag "${IMAGE_URI}" "${LOCAL_MIRROR_IMAGE_URI}"
+docker push "${LOCAL_MIRROR_IMAGE_URI}"
+echo "Local GitOps mirror: ${LOCAL_MIRROR_IMAGE_URI}"
+'''
+          }
+        }
+
+        stage('13. Update GitOps Staging') {
           when {
             allOf {
               expression { params.ENABLE_GITOPS_UPDATE }
@@ -722,7 +775,7 @@ fi
           }
         }
 
-        stage('13. Deploy ECS Staging') {
+        stage('14. Deploy ECS Staging') {
           when {
             allOf {
               expression { params.ENABLE_ECS_DEPLOY }
@@ -742,7 +795,7 @@ fi
           }
         }
 
-        stage('14. DAST Staging') {
+        stage('15. DAST Staging') {
           when {
             allOf {
               expression { params.SECURITY_MODE != 'stub' }
@@ -773,7 +826,7 @@ fi
           }
         }
 
-        stage('15. Normalize Security Reports') {
+        stage('16. Normalize Security Reports') {
           when { expression { params.SECURITY_MODE != 'stub' } }
           steps {
             sh '''#!/usr/bin/env bash
@@ -791,7 +844,7 @@ python3 ci/stages/normalize-reports.py \
           }
         }
 
-        stage('16. Generate Security Hub ASFF') {
+        stage('17. Generate Security Hub ASFF') {
           when { expression { params.ENABLE_SECURITY_HUB_IMPORT } }
           steps {
             script {
@@ -811,7 +864,7 @@ python3 ci/stages/generate-asff.py \
           }
         }
 
-        stage('17. Upload Security Reports to S3') {
+        stage('18. Upload Security Reports to S3') {
           when { expression { params.ENABLE_S3_UPLOAD } }
           steps {
             script {
@@ -859,7 +912,7 @@ fi
           }
         }
 
-        stage('18. Production Approval') {
+        stage('19. Production Approval') {
           when {
             allOf {
               expression { params.PROMOTE_PRODUCTION }
@@ -887,7 +940,7 @@ fi
           }
         }
 
-        stage('19. Update GitOps Production') {
+        stage('20. Update GitOps Production') {
           when {
             allOf {
               expression { params.PROMOTE_PRODUCTION }
@@ -902,7 +955,7 @@ fi
           }
         }
 
-        stage('20. Deploy ECS Production') {
+        stage('21. Deploy ECS Production') {
           when {
             allOf {
               expression { params.PROMOTE_PRODUCTION }
@@ -923,11 +976,12 @@ fi
           }
         }
 
-        stage('21. Summary') {
+        stage('22. Summary') {
           steps {
             echo """CI/CD pipeline completed.
 Source: ${env.SOURCE_BRANCH}@${env.GIT_COMMIT_SHORT}
 Image: ${env.IMAGE_URI}
+GitOps image: ${env.GITOPS_IMAGE_URI}
 Demo preset: ${env.DEMO_PRESET_EFFECTIVE}
 Security mode: ${params.SECURITY_MODE}
 DAST gate mode: ${env.DAST_GATE_MODE_EFFECTIVE}

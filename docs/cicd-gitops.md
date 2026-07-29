@@ -20,7 +20,7 @@ checkout
   -> production GitOps/ECS
 ```
 
-## 21 stage
+## 22 stage
 
 | # | Stage | Điều kiện |
 |---:|---|---|
@@ -31,14 +31,15 @@ checkout
 | 8 | Build Docker Image | Tag SHA và `latest` local |
 | 9 | Container Scan | Theo `SECURITY_MODE` |
 | 10–11 | ECR Login, Push | Login khi dùng ECR |
-| 12–13 | GitOps/ECS Staging | Chỉ release branch và opt-in |
-| 14 | DAST Staging | Cần URL staging |
-| 15 | Normalize Reports | Tạo schema chung và summary |
-| 16 | Generate Security Hub ASFF | Opt-in |
-| 17 | Upload Reports to S3 | Opt-in |
-| 18 | Production Approval | Manual gate, có timeout |
-| 19–20 | GitOps/ECS Production | Chỉ sau approval |
-| 21 | Summary | Tóm tắt build |
+| 12 | Local GitOps image mirror | Mirror image đã scan cho k3d |
+| 13–14 | GitOps/ECS Staging | Chỉ release branch và opt-in |
+| 15 | DAST Staging | Cần URL staging |
+| 16 | Normalize Reports | Tạo schema chung và summary |
+| 17 | Generate Security Hub ASFF | Opt-in |
+| 18 | Upload Reports to S3 | Opt-in |
+| 19 | Production Approval | Manual gate, có timeout |
+| 20–21 | GitOps/ECS Production | Chỉ sau approval |
+| 22 | Summary | Tóm tắt build |
 
 ## Chế độ bảo mật
 
@@ -80,6 +81,12 @@ kustomize edit set image "tetris-devsecops=${IMAGE_URI}"
 
 Commit có hậu tố `[skip ci]` để tránh vòng lặp. Staging và production đều nhận
 đúng SHA image đã scan. Production chỉ cập nhật sau manual approval.
+
+Demo local dùng Git daemon chỉ lắng nghe trên loopback của máy host và network
+Docker `devsecops`. `make gitops-seed` tạo branch nguồn; Jenkins push commit
+GitOps vào remote này, còn Argo CD trong k3d đọc qua
+`git://gitops-git-server:9418/devsecops.git`. Image ECR đã scan được mirror vào
+local registry, nhưng Kustomize vẫn giữ cùng immutable SHA tag.
 
 ## ECS
 

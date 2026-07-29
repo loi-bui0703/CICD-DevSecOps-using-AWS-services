@@ -1,0 +1,29 @@
+# Local-only Argo CD Application. The repository is served by the disposable
+# Git daemon in docker-compose.infra.yml and is reachable from k3d through the
+# shared devsecops Docker network.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tetris-staging
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: git://gitops-git-server:9418/devsecops.git
+    targetRevision: cicd-gitops
+    path: kubernetes/overlays/staging
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: staging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

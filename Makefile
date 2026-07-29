@@ -16,8 +16,8 @@
 # =============================================================================
 
 .PHONY: help up up-infra up-security up-obs down restart status logs \
-        bootstrap k3d-create k3d-delete argocd-install \
-        build-agent setup-env demo-reset demo-trigger clean
+        bootstrap k3d-create k3d-delete argocd-install argocd-apps \
+        build-agent setup-env gitops-seed demo-reset demo-trigger clean
 
 # Load .env if it exists
 ifneq (,$(wildcard .env))
@@ -71,6 +71,14 @@ up: network-create ## Start full stack (all teams)
 up-infra: network-create ## [Team 1] Start infrastructure services only
 	$(COMPOSE_INFRA) up -d --remove-orphans
 	@echo "$(GREEN)Infra services started (Jenkins, Registry)$(NC)"
+
+gitops-seed: ## Seed/reset the disposable local GitOps remote from the current branch
+	@branch="$$(git branch --show-current)"; \
+	  test -n "$$branch"; \
+	  git push --force \
+	    "git://localhost:$${GITOPS_GIT_PORT:-9418}/devsecops.git" \
+	    "HEAD:refs/heads/$$branch"; \
+	  echo "$(GREEN)Local GitOps remote seeded from $$branch$(NC)"
 
 up-security: network-create ## [Team 2] Start security services only
 	$(COMPOSE_SEC) up -d --remove-orphans
@@ -137,6 +145,12 @@ argocd-install: ## Install Argo CD into the active k3d context
 	    -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml && \
 	  kubectl rollout status deployment/argocd-server -n argocd --timeout=5m
 	@echo "$(GREEN)Argo CD installed$(NC)"
+
+argocd-apps: ## Apply the local staging and production Argo CD Applications
+	@export KUBECONFIG=~/.kube/devsecops-local.kubeconfig && \
+	  kubectl apply -f cd/apps/local/staging.yaml && \
+	  kubectl apply -f cd/apps/local/production.yaml
+	@echo "$(GREEN)Local Argo CD applications applied$(NC)"
 
 ##@ Build
 

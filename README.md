@@ -108,17 +108,19 @@ tin cậy và dừng stack khi kết thúc demo.
 cho Jenkins. Muốn dùng webhook/SCM trực tiếp, đổi URL trong job sang GitHub và
 gắn credential `github-token`.
 
-Luồng demo đầy đủ dùng:
+Luồng demo kỹ thuật đầy đủ dùng:
 
-- `DEMO_PRESET=FULL_AWS_DEMO` khi chạy qua `scripts/demo-trigger.sh`
+- `DEMO_PRESET=FULL_PROJECT_DEMO` khi chạy qua `scripts/demo-trigger.sh`
 - `REGISTRY_TARGET=ecr`
 - `IMAGE_PLATFORM=linux/amd64` cho ECS Fargate mặc định
 - `SECURITY_MODE=enforce`
 - `SECURITY_BLOCK_SEVERITIES=CRITICAL` (hoặc `CRITICAL,HIGH`)
+- `ENABLE_SAST=true` với SonarQube token trong Jenkins Credentials
 - `ENABLE_ECS_DEPLOY=true`
 - `ENABLE_DAST=true`, `DAST_GATE_MODE=report-only` và `STAGING_URL` là URL ALB staging
 - `ENABLE_S3_UPLOAD=true`
-- `ENABLE_SECURITY_HUB_IMPORT=false` trong preset; chỉ bật ở custom build nếu Terraform đã bật importer
+- `ENABLE_SECURITY_HUB_IMPORT=true` sau khi Terraform bật Lambda importer
+- `ENABLE_GITOPS_UPDATE=true` và mirror image sang local registry cho k3d/Argo CD
 - `PROMOTE_PRODUCTION=true` để chờ manual approval
 
 Pipeline dùng một tag 12 ký tự từ commit SHA cho cả staging và production.
@@ -134,6 +136,7 @@ Checkov, ZAP, Gitleaks và Trivy. Không dùng `docker compose down -v`.
 cd /Users/loibui/Downloads/devsecops-factory/task-2
 aws sso login --profile devsecops-factory
 docker compose -f docker-compose.infra.yml up -d --build
+make gitops-seed
 
 # Đưa hai ECS service về desired count 0, không destroy Terraform:
 AWS_PROFILE_NAME=devsecops-factory make demo-reset
@@ -146,9 +149,10 @@ make demo-trigger
 ```
 
 `demo-trigger` tự điền ECR, S3 bucket, staging URL, ECS family/cluster,
-security enforce, DAST report-only và production manual gate. Script chỉ in URL
-console/gate, không in Jenkins password hoặc AWS key. Nếu Jenkins chưa biết
-parameter mới, script tự chạy một seed build local-safe trước. Khi kết thúc:
+security enforce, SAST, DAST report-only, S3/Lambda/Security Hub, local GitOps
+mirror và production manual gate. Script chỉ in URL console/gate, không in
+Jenkins password hoặc AWS key. Nếu Jenkins chưa biết parameter mới, script tự
+chạy một seed build local-safe trước. Khi kết thúc:
 
 ```bash
 AWS_PROFILE_NAME=devsecops-factory make demo-reset

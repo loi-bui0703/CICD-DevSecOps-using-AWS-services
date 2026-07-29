@@ -7,6 +7,7 @@ JENKINS_URL="${JENKINS_URL:-http://localhost:8080}"
 JENKINS_JOB="${JENKINS_JOB:-devsecops-factory}"
 JENKINS_USER="${JENKINS_USER:-admin}"
 AWS_REGION="${AWS_REGION:-ap-southeast-1}"
+GITOPS_DEMO_REPO_URL="${GITOPS_DEMO_REPO_URL:-git://gitops-git-server:9418/devsecops.git}"
 
 case "${1:-}" in
   "")
@@ -53,6 +54,9 @@ source "${PROJECT_ROOT}/.env"
 set +a
 
 : "${JENKINS_ADMIN_PASS:?JENKINS_ADMIN_PASS is required in .env}"
+: "${SONAR_TOKEN:?SONAR_TOKEN is required in .env for FULL_PROJECT_DEMO}"
+: "${AWS_ACCESS_KEY_ID:?AWS_ACCESS_KEY_ID is required in .env for FULL_PROJECT_DEMO}"
+: "${AWS_SECRET_ACCESS_KEY:?AWS_SECRET_ACCESS_KEY is required in .env for FULL_PROJECT_DEMO}"
 
 ECR_REPOSITORY_URI="$(terraform -chdir="${TERRAFORM_DIR}" output -raw ecr_repository_url)"
 ECR_REGISTRY="${ECR_REPOSITORY_URI%%/*}"
@@ -61,6 +65,13 @@ ECS_CLUSTER="$(terraform -chdir="${TERRAFORM_DIR}" output -raw ecs_cluster_name)
 ECS_TASK_FAMILY="$(terraform -chdir="${TERRAFORM_DIR}" output -raw ecs_task_family)"
 SECURITY_REPORT_BUCKET="$(terraform -chdir="${TERRAFORM_DIR}" output -raw s3_bucket_name)"
 STAGING_DNS="$(terraform -chdir="${TERRAFORM_DIR}" output -raw alb_dns_staging)"
+SECURITYHUB_IMPORTER="$(
+  terraform -chdir="${TERRAFORM_DIR}" output -raw securityhub_importer_function_name
+)"
+if [ -z "${SECURITYHUB_IMPORTER}" ]; then
+  echo "Security Hub importer is not enabled. Set enable_security_hub_importer=true and apply Terraform." >&2
+  exit 2
+fi
 
 COOKIE_FILE="$(mktemp /tmp/devsecops-demo-cookie.XXXXXX)"
 HEADER_FILE="$(mktemp /tmp/devsecops-demo-headers.XXXXXX)"
@@ -91,7 +102,7 @@ PARAMETER_API="$(
 if ! jq -e \
   '[.property[]?.parameterDefinitions[]?.name] | index("DEMO_PRESET") != null' \
   >/dev/null <<< "${PARAMETER_API}"; then
-  echo "Jenkins has not loaded the FULL_AWS_DEMO parameters. Running one safe seed build..."
+    echo "Jenkins has not loaded the full demo parameters. Running one safe seed build..."
 
   PARAMETER_COUNT="$(
     jq '[.property[]?.parameterDefinitions[]?.name] | length' <<< "${PARAMETER_API}"
@@ -173,13 +184,15 @@ if ! jq -e \
 fi
 
 if [ "${DRY_RUN}" = "true" ]; then
-  echo "FULL_AWS_DEMO preflight passed."
+  echo "FULL_PROJECT_DEMO preflight passed."
   echo "Release branch: ${RELEASE_BRANCH}"
   echo "ECR repository: ${ECR_REPOSITORY_URI}"
   echo "ECS cluster/task family: ${ECS_CLUSTER}/${ECS_TASK_FAMILY}"
   echo "Security report bucket: ${SECURITY_REPORT_BUCKET}"
+  echo "Security Hub importer: ${SECURITYHUB_IMPORTER}"
+  echo "GitOps repository: ${GITOPS_DEMO_REPO_URL}@${RELEASE_BRANCH}"
   echo "Staging URL: http://${STAGING_DNS}"
-  echo "No FULL_AWS_DEMO build was triggered."
+  echo "No FULL_PROJECT_DEMO build was triggered."
   exit 0
 fi
 
@@ -190,9 +203,11 @@ curl -fsS \
   -u "${JENKINS_USER}:${JENKINS_ADMIN_PASS}" \
   -X POST \
   -H "${CRUMB_FIELD}: ${CRUMB_VALUE}" \
-  --data-urlencode 'DEMO_PRESET=FULL_AWS_DEMO' \
+  --data-urlencode 'DEMO_PRESET=FULL_PROJECT_DEMO' \
   --data-urlencode 'REGISTRY_TARGET=ecr' \
   --data-urlencode 'LOCAL_REGISTRY=local-registry:5000' \
+  --data-urlencode 'ENABLE_LOCAL_GITOPS_MIRROR=true' \
+  --data-urlencode 'GITOPS_IMAGE_REGISTRY=localhost:5001' \
   --data-urlencode "ECR_REGISTRY=${ECR_REGISTRY}" \
   --data-urlencode "IMAGE_REPOSITORY=${IMAGE_REPOSITORY}" \
   --data-urlencode 'IMAGE_PLATFORM=linux/amd64' \
@@ -201,14 +216,17 @@ curl -fsS \
   --data-urlencode 'AWS_CREDENTIALS_ID=aws-credentials' \
   --data-urlencode 'SECURITY_MODE=enforce' \
   --data-urlencode 'SECURITY_BLOCK_SEVERITIES=CRITICAL' \
-  --data-urlencode 'ENABLE_SAST=false' \
+  --data-urlencode 'ENABLE_SAST=true' \
   --data-urlencode 'ENABLE_DAST=true' \
   --data-urlencode 'DAST_GATE_MODE=report-only' \
   --data-urlencode "STAGING_URL=http://${STAGING_DNS}" \
   --data-urlencode 'ENABLE_S3_UPLOAD=true' \
   --data-urlencode "SECURITY_REPORT_BUCKET=${SECURITY_REPORT_BUCKET}" \
-  --data-urlencode 'ENABLE_SECURITY_HUB_IMPORT=false' \
-  --data-urlencode 'ENABLE_GITOPS_UPDATE=false' \
+  --data-urlencode 'ENABLE_SECURITY_HUB_IMPORT=true' \
+  --data-urlencode 'ENABLE_GITOPS_UPDATE=true' \
+  --data-urlencode "GITOPS_REPO_URL=${GITOPS_DEMO_REPO_URL}" \
+  --data-urlencode "GITOPS_BRANCH=${RELEASE_BRANCH}" \
+  --data-urlencode 'GIT_CREDENTIALS_ID=github-token' \
   --data-urlencode "RELEASE_BRANCH=${RELEASE_BRANCH}" \
   --data-urlencode 'ENABLE_ECS_DEPLOY=true' \
   --data-urlencode "ECS_CLUSTER=${ECS_CLUSTER}" \
@@ -257,7 +275,7 @@ if [ -z "${BUILD_NUMBER}" ]; then
   exit 1
 fi
 
-echo "FULL_AWS_DEMO build #${BUILD_NUMBER} started."
+echo "FULL_PROJECT_DEMO build #${BUILD_NUMBER} started."
 echo "Console: ${JENKINS_URL}/job/${JENKINS_JOB}/${BUILD_NUMBER}/console"
 echo "Manual gate: ${JENKINS_URL}/job/${JENKINS_JOB}/${BUILD_NUMBER}/input/"
 echo "Image: ${ECR_REGISTRY}/${IMAGE_REPOSITORY}:<commit-sha>"
