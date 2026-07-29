@@ -1,0 +1,25 @@
+# Prometheus Global Configuration
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "alerts.yml"
+
+scrape_configs:
+  # Scrape Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Scrape App / Nginx exporter if running in Docker/ECS
+  - job_name: 'tetris-app'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['tetris-staging:8080', 'tetris-production:8080']
+
+  # Jenkins metrics (if prometheus plugin enabled)
+  - job_name: 'jenkins'
+    metrics_path: '/prometheus/'
+    static_configs:
+      - targets: ['jenkins:8080']
