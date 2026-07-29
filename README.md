@@ -263,7 +263,7 @@ make argocd-apps
 aws sso login --profile devsecops-factory
 AWS_PROFILE_NAME=devsecops-factory make demo-reset
 
-# Chỉ preflight, chưa tạo Jenkins build:
+# Chỉ preflight, chưa tạo Jenkins build: (action này yêu cầu working tree sạch, push all changes)
 ./scripts/demo-trigger.sh --dry-run
 
 # Trigger preset FULL_PROJECT_DEMO:
