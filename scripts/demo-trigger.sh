@@ -36,10 +36,26 @@ fi
 
 cd "${PROJECT_ROOT}"
 
-if [ -n "$(git status --porcelain --untracked-files=normal)" ]; then
-  echo "The working tree is not clean. Commit local changes before triggering Jenkins." >&2
-  echo "Jenkins checks out committed branch content and will not see uncommitted files." >&2
-  exit 2
+DIRTY_STATUS="$(git status --porcelain --untracked-files=normal)"
+if [ -n "${DIRTY_STATUS}" ]; then
+  NON_DOCUMENTATION_CHANGES="$(
+    awk '
+      {
+        path = substr($0, 4)
+        if (path != "README.md" && path !~ /^docs\\//) {
+          print
+        }
+      }
+    ' <<< "${DIRTY_STATUS}"
+  )"
+  if [ "${ALLOW_DIRTY_DOCS:-false}" = "true" ] &&
+    [ -z "${NON_DOCUMENTATION_CHANGES}" ]; then
+    echo "Warning: uncommitted README/docs changes are excluded from the Jenkins checkout."
+  else
+    echo "The working tree is not clean. Commit local changes before triggering Jenkins." >&2
+    echo "Jenkins checks out committed branch content and will not see uncommitted files." >&2
+    exit 2
+  fi
 fi
 
 RELEASE_BRANCH="$(git branch --show-current)"
