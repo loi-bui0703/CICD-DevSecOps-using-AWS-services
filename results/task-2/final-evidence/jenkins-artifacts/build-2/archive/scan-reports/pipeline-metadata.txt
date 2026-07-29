@@ -1,0 +1,10 @@
+source_branch=cicd-gitops
+source_commit=1dba575f066cdbdc062886e02e06c6134a49c0c8
+image_uri=585572506644.dkr.ecr.ap-southeast-1.amazonaws.com/devsecops/tetris:1dba575f066c
+gitops_image_uri=localhost:5001/devsecops/tetris:1dba575f066c
+image_platform=linux/amd64
+registry_target=ecr
+security_mode=enforce
+dast_gate_mode=report-only
+demo_preset=FULL_PROJECT_DEMO
+release_branch=cicd-gitops

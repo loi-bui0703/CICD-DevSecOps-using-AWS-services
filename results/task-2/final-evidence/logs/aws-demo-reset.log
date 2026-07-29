@@ -1,0 +1,11 @@
+./scripts/demo-reset.sh --yes
+Resetting demo services in AWS account 585572506644...
+--------------------------------------------------------
+|                   DescribeServices                   |
++---------+----------+----------+----------------------+
+| desired | pending  | running  |       service        |
++---------+----------+----------+----------------------+
+|  0      |  0       |  0       |  tetris-staging      |
+|  0      |  0       |  0       |  tetris-production   |
++---------+----------+----------+----------------------+
+Demo reset complete. ALBs and other Terraform resources are still provisioned.

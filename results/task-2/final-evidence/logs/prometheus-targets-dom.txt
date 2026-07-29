@@ -1,0 +1,169 @@
+- navigation:
+  - button "Toggle navigation"
+  - link "Prometheus Prometheus":
+    - /url: /graph
+    - img "Prometheus"
+    - text: Prometheus
+  - button "Use light theme":
+  - button "Use dark theme":
+  - button "Use browser-preferred theme":
+- heading "Targets" [level=2]
+- button "All scrape pools"
+- button "All"
+- button "Unhealthy"
+- button "Collapse All"
+- textbox "Filter by endpoint or labels" [active]
+- checkbox "healthy" [checked]
+- generic: healthy
+- checkbox "unhealthy" [checked]
+- generic: unhealthy
+- checkbox "unknown" [checked]
+- generic: unknown
+- heading "blackbox-exporter (1/1 up) show less" [level=3]:
+  - link "blackbox-exporter (1/1 up)":
+    - /url: "#pool-blackbox-exporter"
+  - button "show less"
+- table:
+  - rowgroup:
+    - row "Endpoint State Labels Last Scrape Scrape Duration Error":
+      - columnheader "Endpoint"
+      - columnheader "State"
+      - columnheader "Labels"
+      - columnheader "Last Scrape"
+      - columnheader "Scrape Duration"
+      - columnheader "Error"
+  - rowgroup:
+    - row "http://blackbox-exporter:9115/metrics UP instance=\"blackbox-exporter:9115\" job=\"blackbox-exporter\" 3.650s ago 10.112ms":
+      - cell "http://blackbox-exporter:9115/metrics":
+        - link "http://blackbox-exporter:9115/metrics":
+          - /url: http://blackbox-exporter:9115/metrics
+      - cell "UP":
+        - generic: UP
+      - cell "instance=\"blackbox-exporter:9115\" job=\"blackbox-exporter\"":
+        - generic: instance="blackbox-exporter:9115"
+        - generic: job="blackbox-exporter"
+        - button "Show discovered (pre-relabeling) labels":
+      - cell "3.650s ago"
+      - cell "10.112ms":
+        - generic: 10.112ms
+      - cell
+- heading "prometheus (1/1 up) show less" [level=3]:
+  - link "prometheus (1/1 up)":
+    - /url: "#pool-prometheus"
+  - button "show less"
+- table:
+  - rowgroup:
+    - row "Endpoint State Labels Last Scrape Scrape Duration Error":
+      - columnheader "Endpoint"
+      - columnheader "State"
+      - columnheader "Labels"
+      - columnheader "Last Scrape"
+      - columnheader "Scrape Duration"
+      - columnheader "Error"
+  - rowgroup:
+    - row "http://prometheus:9090/metrics UP instance=\"prometheus:9090\" job=\"prometheus\" 4.360s ago 100.005ms":
+      - cell "http://prometheus:9090/metrics":
+        - link "http://prometheus:9090/metrics":
+          - /url: http://prometheus:9090/metrics
+      - cell "UP":
+        - generic: UP
+      - cell "instance=\"prometheus:9090\" job=\"prometheus\"":
+        - generic: instance="prometheus:9090"
+        - generic: job="prometheus"
+        - button "Show discovered (pre-relabeling) labels":
+      - cell "4.360s ago"
+      - cell "100.005ms":
+        - generic: 100.005ms
+      - cell
+- heading "service-health (3/3 up) show less" [level=3]:
+  - link "service-health (3/3 up)":
+    - /url: "#pool-service-health"
+  - button "show less"
+- table:
+  - rowgroup:
+    - row "Endpoint State Labels Last Scrape Scrape Duration Error":
+      - columnheader "Endpoint"
+      - columnheader "State"
+      - columnheader "Labels"
+      - columnheader "Last Scrape"
+      - columnheader "Scrape Duration"
+      - columnheader "Error"
+  - rowgroup:
+    - row "http://blackbox-exporter:9115/probe module=\"http_2xx\" target=\"http://jenkins:8080/login\" UP instance=\"http://jenkins:8080/login\" job=\"service-health\" 6.561s ago 105.952ms":
+      - cell "http://blackbox-exporter:9115/probe module=\"http_2xx\" target=\"http://jenkins:8080/login\"":
+        - link "http://blackbox-exporter:9115/probe":
+          - /url: http://blackbox-exporter:9115/probe?module=http_2xx&target=http%3A%2F%2Fjenkins%3A8080%2Flogin
+        - generic: module="http_2xx"
+        - generic: target="http://jenkins:8080/login"
+      - cell "UP":
+        - generic: UP
+      - cell "instance=\"http://jenkins:8080/login\" job=\"service-health\"":
+        - generic: instance="http://jenkins:8080/login"
+        - generic: job="service-health"
+        - button "Show discovered (pre-relabeling) labels":
+      - cell "6.561s ago"
+      - cell "105.952ms":
+        - generic: 105.952ms
+      - cell
+    - row "http://blackbox-exporter:9115/probe module=\"http_2xx\" target=\"http://local-registry:5000/v2/\" UP instance=\"http://local-registry:5000/v2/\" job=\"service-health\" 5.259s ago 22.346ms":
+      - cell "http://blackbox-exporter:9115/probe module=\"http_2xx\" target=\"http://local-registry:5000/v2/\"":
+        - link "http://blackbox-exporter:9115/probe":
+          - /url: http://blackbox-exporter:9115/probe?module=http_2xx&target=http%3A%2F%2Flocal-registry%3A5000%2Fv2%2F
+        - generic: module="http_2xx"
+        - generic: target="http://local-registry:5000/v2/"
+      - cell "UP":
+        - generic: UP
+      - cell "instance=\"http://local-registry:5000/v2/\" job=\"service-health\"":
+        - generic: instance="http://local-registry:5000/v2/"
+        - generic: job="service-health"
+        - button "Show discovered (pre-relabeling) labels":
+      - cell "5.259s ago"
+      - cell "22.346ms":
+        - generic: 22.346ms
+      - cell
+    - row "http://blackbox-exporter:9115/probe module=\"http_2xx\" target=\"http://sonarqube:9000/api/system/status\" UP instance=\"http://sonarqube:9000/api/system/status\" job=\"service-health\" 6.743s ago 158.326ms":
+      - cell "http://blackbox-exporter:9115/probe module=\"http_2xx\" target=\"http://sonarqube:9000/api/system/status\"":
+        - link "http://blackbox-exporter:9115/probe":
+          - /url: http://blackbox-exporter:9115/probe?module=http_2xx&target=http%3A%2F%2Fsonarqube%3A9000%2Fapi%2Fsystem%2Fstatus
+        - generic: module="http_2xx"
+        - generic: target="http://sonarqube:9000/api/system/status"
+      - cell "UP":
+        - generic: UP
+      - cell "instance=\"http://sonarqube:9000/api/system/status\" job=\"service-health\"":
+        - generic: instance="http://sonarqube:9000/api/system/status"
+        - generic: job="service-health"
+        - button "Show discovered (pre-relabeling) labels":
+      - cell "6.743s ago"
+      - cell "158.326ms":
+        - generic: 158.326ms
+      - cell
+- heading "tetris-staging (1/1 up) show less" [level=3]:
+  - link "tetris-staging (1/1 up)":
+    - /url: "#pool-tetris-staging"
+  - button "show less"
+- table:
+  - rowgroup:
+    - row "Endpoint State Labels Last Scrape Scrape Duration Error":
+      - columnheader "Endpoint"
+      - columnheader "State"
+      - columnheader "Labels"
+      - columnheader "Last Scrape"
+      - columnheader "Scrape Duration"
+      - columnheader "Error"
+  - rowgroup:
+    - row "http://blackbox-exporter:9115/probe module=\"http_tetris_staging\" target=\"http://host.docker.internal/\" UP instance=\"http://host.docker.internal/\" job=\"tetris-staging\" 5.637s ago 21.168ms":
+      - cell "http://blackbox-exporter:9115/probe module=\"http_tetris_staging\" target=\"http://host.docker.internal/\"":
+        - link "http://blackbox-exporter:9115/probe":
+          - /url: http://blackbox-exporter:9115/probe?module=http_tetris_staging&target=http%3A%2F%2Fhost.docker.internal%2F
+        - generic: module="http_tetris_staging"
+        - generic: target="http://host.docker.internal/"
+      - cell "UP":
+        - generic: UP
+      - cell "instance=\"http://host.docker.internal/\" job=\"tetris-staging\"":
+        - generic: instance="http://host.docker.internal/"
+        - generic: job="tetris-staging"
+        - button "Show discovered (pre-relabeling) labels":
+      - cell "5.637s ago"
+      - cell "21.168ms":
+        - generic: 21.168ms
+      - cell

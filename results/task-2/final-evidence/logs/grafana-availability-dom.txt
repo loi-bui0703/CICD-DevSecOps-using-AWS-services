@@ -1,0 +1,37 @@
+- link "Skip to main content":
+  - /url: "#pageContent"
+  - generic: Skip to main content
+- banner:
+  - link "Grafana":
+    - /url: /
+    - img "Grafana"
+  - button "Search or jump to..."
+  - generic: ⌘+k
+  - button "New":
+  - button "Help":
+  - button "News":
+  - button "Profile":
+    - img "User avatar"
+  - button "Open menu":
+  - navigation "Breadcrumbs":
+    - list:
+      - link "Home":
+        - /url: /
+      - link "Dashboards":
+        - /url: /dashboards
+      - link "DevSecOps":
+        - /url: /dashboards/f/eftjxkfau5xq8c/devsecops
+      - generic "DevSecOps Factory - Availability"
+  - button "Mark as favorite":
+  - button "Show more items":
+  - button "Toggle top search bar":
+- main:
+  - heading "Service availability" [level=2]
+  - generic: http://host.docker.internal/
+  - generic: "1"
+  - generic: http://jenkins:8080/login
+  - generic: "1"
+  - generic: http://local-registry:5000/v2/
+  - generic: "1"
+  - generic: http://sonarqube:9000/api/system/status
+  - generic: "1"

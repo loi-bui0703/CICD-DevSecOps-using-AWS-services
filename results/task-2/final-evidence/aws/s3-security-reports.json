@@ -1,0 +1,226 @@
+{
+    "Contents": [
+        {
+            "Key": "reports/asff/",
+            "LastModified": "2026-07-29T09:21:33+00:00",
+            "ETag": "\"d41d8cd98f00b204e9800998ecf8427e\"",
+            "ChecksumAlgorithm": [
+                "CRC32"
+            ],
+            "ChecksumType": "FULL_OBJECT",
+            "Size": 0,
+            "StorageClass": "STANDARD"
+        },
+        {
+            "Key": "reports/asff/devsecops-factory/2-1dba575f066c/securityhub-asff.json",
+            "LastModified": "2026-07-29T09:50:16+00:00",
+            "ETag": "\"3cc62d7cb3f20d0d26b8da065fd5f777\"",
+            "ChecksumAlgorithm": [
+                "CRC64NVME"
+            ],
+            "ChecksumType": "FULL_OBJECT",
+            "Size": 410032,
+            "StorageClass": "STANDARD"
+        },
+        {
+            "Key": "reports/container/",
+            "LastModified": "2026-07-29T09:21:33+00:00",
+            "ETag": "\"d41d8cd98f00b204e9800998ecf8427e\"",
+            "ChecksumAlgorithm": [
+                "CRC32"
+            ],
+            "ChecksumType": "FULL_OBJECT",
+            "Size": 0,
+            "StorageClass": "STANDARD"
+        },
+        {
+            "Key": "reports/container/devsecops-factory/2-1dba575f066c/container-scan-report.json",
+            "LastModified": "2026-07-29T09:50:09+00:00",
+            "ETag": "\"bf600b80d4512bd34e21b651cb37c39e\"",
+            "ChecksumAlgorithm": [
+                "CRC64NVME"
+            ],
+            "ChecksumType": "FULL_OBJECT",
+            "Size": 154712,
+            "StorageClass": "STANDARD"
+        },
+        {
+            "Key": "reports/dast/",
+            "LastModified": "2026-07-29T09:21:33+00:00",
+            "ETag": "\"d41d8cd98f00b204e9800998ecf8427e\"",
+            "ChecksumAlgorithm": [
+                "CRC32"
+            ],
+            "ChecksumType": "FULL_OBJECT",
+            "Size": 0,
+            "StorageClass": "STANDARD"
+        },
+        {
+            "Key": "reports/dast/devsecops-factory/2-1dba575f066c/zap-report.html",
+            "LastModified": "2026-07-29T09:50:10+00:00",
+            "ETag": "\"b45bd14ca64401ddd72332046af98e89\"",
+            "ChecksumAlgorithm": [
+                "CRC64NVME"
+            ],
+            "ChecksumType": "FULL_OBJECT",
+            "Size": 90437,
+            "StorageClass": "STANDARD"
+        },
+        {
+            "Key": "reports/dast/devsecops-factory/2-1dba575f066c/zap-report.json",
+            "LastModified": "2026-07-29T09:50:10+00:00",
+            "ETag": "\"b82f283f2edd7603df2ff4054a0ddc3b\"",
+            "ChecksumAlgorithm": [
+                "CRC64NVME"
+            ],
+            "ChecksumType": "FULL_OBJECT",
+            "Size": 35314,
+            "StorageClass": "STANDARD"
+        },
+        {
+            "Key": "reports/dast/devsecops-factory/2-1dba575f066c/zap-report.xml",
+            "LastModified": "2026-07-29T09:50:11+00:00",
+            "ETag": "\"78120aa977138b502bdd6fe45afab69b\"",
+            "ChecksumAlgorithm": [
+                "CRC64NVME"
+            ],
+            "ChecksumType": "FULL_OBJECT",
+            "Size": 41555,
+            "StorageClass": "STANDARD"
+        },
+        {
+            "Key": "reports/iac/",
+            "LastModified": "2026-07-29T09:21:33+00:00",
+            "ETag": "\"d41d8cd98f00b204e9800998ecf8427e\"",
+            "ChecksumAlgorithm": [
+                "CRC32"
+            ],
+            "ChecksumType": "FULL_OBJECT",
+            "Size": 0,
+            "StorageClass": "STANDARD"
+        },
+        {
+            "Key": "reports/iac/devsecops-factory/2-1dba575f066c/checkov_report.json",
+            "LastModified": "2026-07-29T09:50:12+00:00",
+            "ETag": "\"11e47278e066321b2da9a058987c44ed-2\"",
+            "ChecksumAlgorithm": [
+                "CRC64NVME"
+            ],
+            "ChecksumType": "FULL_OBJECT",
+            "Size": 9747585,
+            "StorageClass": "STANDARD"
+        },
+        {
+            "Key": "reports/metadata/devsecops-factory/2-1dba575f066c/security-integration-status.txt",
+            "LastModified": "2026-07-29T09:50:14+00:00",
+            "ETag": "\"6772cb14c5c0eead6994b89540540dbd\"",
+            "ChecksumAlgorithm": [
+                "CRC64NVME"
+            ],
+            "ChecksumType": "FULL_OBJECT",
+            "Size": 259,
+            "StorageClass": "STANDARD"
+        },
+        {
+            "Key": "reports/normalized/devsecops-factory/2-1dba575f066c/findings.json",
+            "LastModified": "2026-07-29T09:50:15+00:00",
+            "ETag": "\"32f5850f9b266b59b725387b51165991\"",
+            "ChecksumAlgorithm": [
+                "CRC64NVME"
+            ],
+            "ChecksumType": "FULL_OBJECT",
+            "Size": 198823,
+            "StorageClass": "STANDARD"
+        },
+        {
+            "Key": "reports/normalized/devsecops-factory/2-1dba575f066c/summary.json",
+            "LastModified": "2026-07-29T09:50:16+00:00",
+            "ETag": "\"bb7a85d541d9fb42a395a69b4b83bcc6\"",
+            "ChecksumAlgorithm": [
+                "CRC64NVME"
+            ],
+            "ChecksumType": "FULL_OBJECT",
+            "Size": 527,
+            "StorageClass": "STANDARD"
+        },
+        {
+            "Key": "reports/sast/",
+            "LastModified": "2026-07-29T09:21:33+00:00",
+            "ETag": "\"d41d8cd98f00b204e9800998ecf8427e\"",
+            "ChecksumAlgorithm": [
+                "CRC32"
+            ],
+            "ChecksumType": "FULL_OBJECT",
+            "Size": 0,
+            "StorageClass": "STANDARD"
+        },
+        {
+            "Key": "reports/sast/devsecops-factory/2-1dba575f066c/sonar-issues.json",
+            "LastModified": "2026-07-29T09:50:08+00:00",
+            "ETag": "\"c04102946e4b921f1ca6a78f5d25b043\"",
+            "ChecksumAlgorithm": [
+                "CRC64NVME"
+            ],
+            "ChecksumType": "FULL_OBJECT",
+            "Size": 85260,
+            "StorageClass": "STANDARD"
+        },
+        {
+            "Key": "reports/sca/",
+            "LastModified": "2026-07-29T09:21:33+00:00",
+            "ETag": "\"d41d8cd98f00b204e9800998ecf8427e\"",
+            "ChecksumAlgorithm": [
+                "CRC32"
+            ],
+            "ChecksumType": "FULL_OBJECT",
+            "Size": 0,
+            "StorageClass": "STANDARD"
+        },
+        {
+            "Key": "reports/sca/devsecops-factory/2-1dba575f066c/trivy-sca-report.html",
+            "LastModified": "2026-07-29T09:50:08+00:00",
+            "ETag": "\"65d3f99adbbd5912bcd6458928b76002\"",
+            "ChecksumAlgorithm": [
+                "CRC64NVME"
+            ],
+            "ChecksumType": "FULL_OBJECT",
+            "Size": 661,
+            "StorageClass": "STANDARD"
+        },
+        {
+            "Key": "reports/sca/devsecops-factory/2-1dba575f066c/trivy-sca-report.json",
+            "LastModified": "2026-07-29T09:50:07+00:00",
+            "ETag": "\"5f86d592d476402d0d7c7f1fa69bfb04\"",
+            "ChecksumAlgorithm": [
+                "CRC64NVME"
+            ],
+            "ChecksumType": "FULL_OBJECT",
+            "Size": 57452,
+            "StorageClass": "STANDARD"
+        },
+        {
+            "Key": "reports/secrets/",
+            "LastModified": "2026-07-29T09:21:33+00:00",
+            "ETag": "\"d41d8cd98f00b204e9800998ecf8427e\"",
+            "ChecksumAlgorithm": [
+                "CRC32"
+            ],
+            "ChecksumType": "FULL_OBJECT",
+            "Size": 0,
+            "StorageClass": "STANDARD"
+        },
+        {
+            "Key": "reports/secrets/devsecops-factory/2-1dba575f066c/gitleaks-report.json",
+            "LastModified": "2026-07-29T09:50:06+00:00",
+            "ETag": "\"58e0494c51d30eb3494f7c9198986bb9\"",
+            "ChecksumAlgorithm": [
+                "CRC64NVME"
+            ],
+            "ChecksumType": "FULL_OBJECT",
+            "Size": 3,
+            "StorageClass": "STANDARD"
+        }
+    ],
+    "RequestCharged": null,
+    "Prefix": "reports/"
+}

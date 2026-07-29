@@ -1,0 +1,73 @@
+- link "Skip to content":
+  - /url: "#skip2content"
+- banner:
+  - link:
+    - /url: /
+  - generic "breadcrumb":
+    - list:
+      - text: /
+      - text: /
+      - button:
+      - text: /
+      - link "#2":
+        - /url: /job/devsecops-factory/2/
+      - 'generic "dropdown menu for #2"':
+      - text: /
+      - generic: Paused for Input
+  - button "Search":
+    - generic: Search
+  - link "Manage Jenkins":
+    - /url: /manage
+    - generic: Manage Jenkins
+  - button "More actions":
+  - link "admin":
+    - /url: /user/admin
+    - generic: admin
+- link "Status":
+  - /url: /job/devsecops-factory/2/
+  - text: Status
+- link "Changes":
+  - /url: /job/devsecops-factory/2/changes
+  - text: Changes
+- link "Console Output":
+  - /url: /job/devsecops-factory/2/console
+  - text: Console Output
+- link "Edit Build Information":
+  - /url: /job/devsecops-factory/2/configure
+  - text: Edit Build Information
+- link "Parameters":
+  - /url: /job/devsecops-factory/2/parameters
+  - text: Parameters
+- link "Git Build Data":
+  - /url: /job/devsecops-factory/2/git
+  - text: Git Build Data
+- link "Git Build Data":
+  - /url: /job/devsecops-factory/2/git-2
+  - text: Git Build Data
+- link "Paused for Input":
+  - /url: /job/devsecops-factory/2/input
+  - text: Paused for Input
+- link "Open Blue Ocean":
+  - /url: /blue/organizations/jenkins/devsecops-factory/detail/devsecops-factory/2/
+  - text: Open Blue Ocean
+- link "Thread Dump":
+  - /url: /job/devsecops-factory/2/threadDump
+  - text: Thread Dump
+- link "Pause/resume":
+  - /url: /job/devsecops-factory/2/pause/toggle
+  - text: Pause/resume
+- link "Replay":
+  - /url: /job/devsecops-factory/2/replay
+  - text: Replay
+- link "Pipeline Steps":
+  - /url: /job/devsecops-factory/2/flowGraphTable
+  - text: Pipeline Steps
+- link "Workspaces":
+  - /url: /job/devsecops-factory/2/ws
+  - text: Workspaces
+- link "Previous Build":
+  - /url: /job/devsecops-factory/1/input/
+  - text: Previous Build
+- heading "Promote immutable image 585572506644.dkr.ecr.ap-southeast-1.amazonaws.com/devsecops/tetris:1dba575f066c to production?" [level=1]
+- button "Promote to production"
+- button "Abort"

@@ -1,0 +1,12 @@
+Jenkins job devsecops-factory does not exist. Creating it from ci/jenkins-job.xml...
+Jenkins has not loaded the full demo parameters. Running one safe seed build...
+Safe seed build #1 loaded the new parameters.
+FULL_PROJECT_DEMO preflight passed.
+Release branch: cicd-gitops
+ECR repository: 585572506644.dkr.ecr.ap-southeast-1.amazonaws.com/devsecops/tetris
+ECS cluster/task family: devsecops-factory-cluster/tetris-app
+Security report bucket: devsecops-reports-vrlcwzq4
+Security Hub importer: devsecops-factory-securityhub-importer
+GitOps repository: git://gitops-git-server:9418/devsecops.git@cicd-gitops
+Staging URL: http://devsecops-factory-alb-staging-1252599894.ap-southeast-1.elb.amazonaws.com
+No FULL_PROJECT_DEMO build was triggered.

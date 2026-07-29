@@ -1,0 +1,18 @@
+{
+    "imageScanFindings": {
+        "findings": [],
+        "imageScanCompletedAt": "2026-07-29T16:38:12+07:00",
+        "vulnerabilitySourceUpdatedAt": "2026-07-29T16:38:12+07:00",
+        "findingSeverityCounts": {}
+    },
+    "registryId": "585572506644",
+    "repositoryName": "devsecops/tetris",
+    "imageId": {
+        "imageDigest": "sha256:4c07c345625d39f6afaf2103f70b3d5ba97bfab1420e36efa0ca2fc74021be66",
+        "imageTag": "1dba575f066c"
+    },
+    "imageScanStatus": {
+        "status": "COMPLETE",
+        "description": "The scan was completed successfully."
+    }
+}

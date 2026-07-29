@@ -1,0 +1,17 @@
+AWS CloudWatch — devsecops-factory-securityhub-importer
+========================================================
+
+Metric namespace: AWS/Lambda
+Function name:    devsecops-factory-securityhub-importer
+Period:           2026-07-29 16:50:00 +07:00
+
+Invocations:      1
+Errors:           0
+
+The single invocation was triggered by the Jenkins build #2 ASFF report upload.
+AWS Security Hub contains all 186 findings produced by that build.
+
+Machine-readable sources:
+- lambda-invocations-metric.json
+- lambda-errors-metric.json
+- securityhub-imported-findings.json

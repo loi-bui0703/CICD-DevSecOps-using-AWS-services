@@ -191,13 +191,13 @@ Kết quả bàn giao:
 
 ### Checklist hoàn thành
 
-- [ ] AWS Budget đã tạo.
-- [ ] IAM access không dùng root user.
-- [ ] ECR repository đã tạo.
-- [ ] ECS Fargate Cluster tạo thành công (staging + production services).
-- [ ] S3 bucket tạo thành công, có đủ prefix cho từng loại scan.
-- [ ] Có hướng dẫn cleanup AWS (scale ECS về 0 ngay sau demo).
-- [ ] Có ảnh chụp minh chứng cho báo cáo.
+- [x] AWS Budget đã tạo.
+- [x] IAM access không dùng root user.
+- [x] ECR repository đã tạo.
+- [x] ECS Fargate Cluster tạo thành công (staging + production services).
+- [x] S3 bucket tạo thành công, có đủ prefix cho từng loại scan.
+- [x] Có hướng dẫn cleanup AWS (scale ECS về 0 ngay sau demo).
+- [x] Có ảnh chụp minh chứng cho báo cáo.
 
 ## Task 2 - CI/CD và GitOps
 
@@ -364,14 +364,14 @@ Tiêu chí hoàn thành:
 
 ### Checklist hoàn thành
 
-- [ ] Jenkins pipeline chạy end-to-end.
-- [ ] Image build thành công.
-- [ ] Image push lên ECR.
-- [ ] Jenkins archive security reports.
-- [ ] Argo CD staging sync thành công.
-- [ ] Production app được bổ sung.
-- [ ] Manual approval gate hoạt động.
-- [ ] Không hardcode secret.
+- [x] Jenkins pipeline chạy end-to-end.
+- [x] Image build thành công.
+- [x] Image push lên ECR.
+- [x] Jenkins archive security reports.
+- [x] Argo CD staging sync thành công.
+- [x] Production app được bổ sung.
+- [x] Manual approval gate hoạt động.
+- [x] Không hardcode secret.
 
 ## Task 3 - DevSecOps Security
 
@@ -579,15 +579,15 @@ Tiêu chí hoàn thành:
 
 ### Checklist hoàn thành
 
-- [ ] Secrets scan hoạt động.
-- [ ] SCA scan có report.
-- [ ] SAST SonarQube chạy được.
-- [ ] IaC scan dùng đúng đường dẫn.
-- [ ] Container scan có JSON report.
-- [ ] DAST scan staging URL.
-- [ ] **AWS Lambda** tự động xử lý report từ **S3**.
-- [ ] Có bảng security findings cho báo cáo.
-- [ ] Có đề xuất remediation.
+- [x] Secrets scan hoạt động.
+- [x] SCA scan có report.
+- [x] SAST SonarQube chạy được.
+- [x] IaC scan dùng đúng đường dẫn.
+- [x] Container scan có JSON report.
+- [x] DAST scan staging URL.
+- [x] **AWS Lambda** tự động xử lý report từ **S3**.
+- [x] Có bảng security findings cho báo cáo.
+- [x] Có đề xuất remediation.
 
 ## Task 4 - Application, Docker, Kubernetes Manifests và ECS Task Definition
 
@@ -782,14 +782,14 @@ Tiêu chí hoàn thành:
 
 ### Checklist hoàn thành
 
-- [ ] App React build được.
-- [ ] Docker image chạy local được.
-- [ ] Kubernetes base manifest hợp lệ.
-- [ ] Staging overlay deploy được.
-- [ ] Production overlay deploy được.
-- [ ] Container port, Service targetPort, probes khớp nhau.
-- [ ] ECS Task Definition (`ecs-task-def.json`) đã được tạo.
-- [ ] App documentation được cập nhật.
+- [x] App React build được.
+- [x] Docker image chạy local được.
+- [x] Kubernetes base manifest hợp lệ.
+- [x] Staging overlay deploy được.
+- [x] Production overlay deploy được.
+- [x] Container port, Service targetPort, probes khớp nhau.
+- [x] ECS Task Definition (`ecs-task-def.json`) đã được tạo.
+- [x] App documentation được cập nhật.
 
 ## Task5 - Observability, QA, Documentation và Demo
 
@@ -1017,8 +1017,8 @@ Kết quả bàn giao:
 
 ### Checklist hoàn thành
 
-- [ ] CloudWatch có log/metric screenshot.
-- [ ] Test case end-to-end hoàn chỉnh.
+- [x] CloudWatch có log/metric screenshot.
+- [x] Test case end-to-end hoàn chỉnh.
 - [ ] Workshop website có cấu trúc đúng template FCAJ.
 - [ ] Nội dung chính có đủ tiếng Việt và tiếng Anh.
 - [ ] Worklog có đủ Week 1 đến Week 12.
@@ -1029,8 +1029,8 @@ Kết quả bàn giao:
 - [ ] Sharing and Feedback hoàn chỉnh.
 - [ ] Slide demo có kiến trúc và kết quả.
 - [ ] Demo script 10 phút có phân vai.
-- [ ] Có checklist cleanup AWS.
-- [ ] Có ảnh backup cho trường hợp demo live lỗi.
+- [x] Có checklist cleanup AWS.
+- [x] Có ảnh backup cho trường hợp demo live lỗi.
 
 ## Roadmap 12 tuần mẫu để viết worklog
 
@@ -1158,21 +1158,21 @@ Kết quả bàn giao:
 
 Trước ngày nộp, cả nhóm phải cùng kiểm tra:
 
-- [ ] AWS Budget đã bật.
-- [ ] ECR có image mới.
-- [ ] ECS Fargate cluster active và chạy đúng 2 services (staging, production).
-- [ ] S3 Bucket nhận file report và kích hoạt Lambda thành công.
-- [ ] Jenkins pipeline chạy end-to-end.
-- [ ] Secrets scan hoạt động.
-- [ ] SCA scan hoạt động.
-- [ ] SAST scan hoạt động hoặc có giải thích nếu chưa bật.
-- [ ] IaC scan hoạt động.
-- [ ] Container scan hoạt động.
-- [ ] DAST scan được staging URL.
-- [ ] Argo CD staging `Synced` và `Healthy`.
-- [ ] Production có manual approval hoặc quy trình promote rõ ràng.
-- [ ] CloudWatch có logs/metrics.
-- [ ] Project dùng ít nhất 3 dịch vụ AWS và có giải thích lý do chọn từng dịch vụ.
+- [x] AWS Budget đã bật.
+- [x] ECR có image mới.
+- [x] ECS Fargate cluster active và chạy đúng 2 services (staging, production).
+- [x] S3 Bucket nhận file report và kích hoạt Lambda thành công.
+- [x] Jenkins pipeline chạy end-to-end.
+- [x] Secrets scan hoạt động.
+- [x] SCA scan hoạt động.
+- [x] SAST scan hoạt động hoặc có giải thích nếu chưa bật.
+- [x] IaC scan hoạt động.
+- [x] Container scan hoạt động.
+- [x] DAST scan được staging URL.
+- [x] Argo CD staging `Synced` và `Healthy`.
+- [x] Production có manual approval hoặc quy trình promote rõ ràng.
+- [x] CloudWatch có logs/metrics.
+- [x] Project dùng ít nhất 3 dịch vụ AWS và có giải thích lý do chọn từng dịch vụ.
 - [ ] Workshop website dựa trên template FCAJ.
 - [ ] Nội dung chính có đủ `vi/en`.
 - [ ] Worklog có đủ Week 1 đến Week 12.
@@ -1182,4 +1182,4 @@ Trước ngày nộp, cả nhóm phải cùng kiểm tra:
 - [ ] Có Self-evaluation.
 - [ ] Có Sharing and Feedback.
 - [ ] Báo cáo có ảnh chụp chứng minh, sơ đồ kiến trúc, code snippet và file đính kèm.
-- [ ] Có script cleanup AWS sau demo.
+- [x] Có script cleanup AWS sau demo.

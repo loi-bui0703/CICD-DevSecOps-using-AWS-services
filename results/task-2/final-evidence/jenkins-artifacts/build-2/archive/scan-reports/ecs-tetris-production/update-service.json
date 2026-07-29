@@ -1,0 +1,145 @@
+{
+    "service": {
+        "serviceArn": "arn:aws:ecs:ap-southeast-1:585572506644:service/devsecops-factory-cluster/tetris-production",
+        "serviceName": "tetris-production",
+        "clusterArn": "arn:aws:ecs:ap-southeast-1:585572506644:cluster/devsecops-factory-cluster",
+        "loadBalancers": [
+            {
+                "targetGroupArn": "arn:aws:elasticloadbalancing:ap-southeast-1:585572506644:targetgroup/devsecops-factory-tg-prod/7d40484b36fc11d4",
+                "containerName": "tetris",
+                "containerPort": 8080
+            }
+        ],
+        "serviceRegistries": [],
+        "status": "ACTIVE",
+        "desiredCount": 1,
+        "runningCount": 0,
+        "pendingCount": 0,
+        "capacityProviderStrategy": [
+            {
+                "capacityProvider": "FARGATE",
+                "weight": 100,
+                "base": 0
+            }
+        ],
+        "platformVersion": "LATEST",
+        "platformFamily": "Linux",
+        "taskDefinition": "arn:aws:ecs:ap-southeast-1:585572506644:task-definition/tetris-app:12",
+        "deploymentConfiguration": {
+            "deploymentCircuitBreaker": {
+                "enable": true,
+                "rollback": true
+            },
+            "maximumPercent": 200,
+            "minimumHealthyPercent": 100
+        },
+        "deployments": [
+            {
+                "id": "ecs-svc/6052473663495734591",
+                "status": "PRIMARY",
+                "taskDefinition": "arn:aws:ecs:ap-southeast-1:585572506644:task-definition/tetris-app:12",
+                "desiredCount": 0,
+                "pendingCount": 0,
+                "runningCount": 0,
+                "failedTasks": 0,
+                "createdAt": "2026-07-29T09:51:57.823000+00:00",
+                "updatedAt": "2026-07-29T09:51:57.823000+00:00",
+                "capacityProviderStrategy": [
+                    {
+                        "capacityProvider": "FARGATE",
+                        "weight": 100,
+                        "base": 0
+                    }
+                ],
+                "platformVersion": "1.4.0",
+                "platformFamily": "Linux",
+                "networkConfiguration": {
+                    "awsvpcConfiguration": {
+                        "subnets": [
+                            "subnet-01afd2c98856b8c94",
+                            "subnet-08a2dbbc6b28bcf6f"
+                        ],
+                        "securityGroups": [
+                            "sg-0fb197e638b8cc1e4"
+                        ],
+                        "assignPublicIp": "ENABLED"
+                    }
+                },
+                "rolloutState": "IN_PROGRESS",
+                "rolloutStateReason": "ECS deployment ecs-svc/6052473663495734591 in progress."
+            },
+            {
+                "id": "ecs-svc/1548016853526074572",
+                "status": "ACTIVE",
+                "taskDefinition": "arn:aws:ecs:ap-southeast-1:585572506644:task-definition/tetris-app:10",
+                "desiredCount": 0,
+                "pendingCount": 0,
+                "runningCount": 0,
+                "failedTasks": 0,
+                "createdAt": "2026-07-29T09:24:56.681000+00:00",
+                "updatedAt": "2026-07-29T09:25:13.325000+00:00",
+                "capacityProviderStrategy": [
+                    {
+                        "capacityProvider": "FARGATE",
+                        "weight": 100,
+                        "base": 0
+                    }
+                ],
+                "platformVersion": "1.4.0",
+                "platformFamily": "Linux",
+                "networkConfiguration": {
+                    "awsvpcConfiguration": {
+                        "subnets": [
+                            "subnet-01afd2c98856b8c94",
+                            "subnet-08a2dbbc6b28bcf6f"
+                        ],
+                        "securityGroups": [
+                            "sg-0fb197e638b8cc1e4"
+                        ],
+                        "assignPublicIp": "ENABLED"
+                    }
+                },
+                "rolloutState": "COMPLETED",
+                "rolloutStateReason": "ECS deployment ecs-svc/1548016853526074572 completed."
+            }
+        ],
+        "roleArn": "arn:aws:iam::585572506644:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS",
+        "events": [
+            {
+                "id": "11723504-8dce-440f-9aa6-3ddd1c451b66",
+                "createdAt": "2026-07-29T09:25:13.330000+00:00",
+                "message": "(service tetris-production) has reached a steady state."
+            },
+            {
+                "id": "dc3df00a-3069-4b9a-9817-fdf3bf03b1c8",
+                "createdAt": "2026-07-29T09:25:13.329000+00:00",
+                "message": "(service tetris-production) (deployment ecs-svc/1548016853526074572) deployment completed."
+            }
+        ],
+        "createdAt": "2026-07-29T09:24:56.681000+00:00",
+        "placementConstraints": [],
+        "placementStrategy": [],
+        "networkConfiguration": {
+            "awsvpcConfiguration": {
+                "subnets": [
+                    "subnet-01afd2c98856b8c94",
+                    "subnet-08a2dbbc6b28bcf6f"
+                ],
+                "securityGroups": [
+                    "sg-0fb197e638b8cc1e4"
+                ],
+                "assignPublicIp": "ENABLED"
+            }
+        },
+        "healthCheckGracePeriodSeconds": 0,
+        "schedulingStrategy": "REPLICA",
+        "deploymentController": {
+            "type": "ECS"
+        },
+        "createdBy": "arn:aws:iam::585572506644:role/aws-reserved/sso.amazonaws.com/ap-southeast-1/AWSReservedSSO_AdministratorAccess_0cee239a6dc13334",
+        "enableECSManagedTags": false,
+        "propagateTags": "NONE",
+        "enableExecuteCommand": false,
+        "availabilityZoneRebalancing": "DISABLED"
+    }
+}

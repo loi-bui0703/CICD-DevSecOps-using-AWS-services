@@ -1,0 +1,138 @@
+- link "Skip to content":
+  - /url: "#skip2content"
+- banner:
+  - link:
+    - /url: /
+  - generic "breadcrumb":
+    - list:
+      - text: /
+      - link "devsecops-factory":
+        - /url: /job/devsecops-factory/
+      - generic "dropdown menu for devsecops-factory":
+      - text: /
+      - generic: "#2"
+  - button "Search":
+    - generic: Search
+  - link "Manage Jenkins":
+    - /url: /manage
+    - generic: Manage Jenkins
+  - button "More actions":
+  - link "admin":
+    - /url: /user/admin
+    - generic: admin
+- link "Status":
+  - /url: /job/devsecops-factory/2/
+  - text: Status
+- link "Changes":
+  - /url: /job/devsecops-factory/2/changes
+  - text: Changes
+- link "Console Output":
+  - /url: /job/devsecops-factory/2/console
+  - text: Console Output
+- link "Edit Build Information":
+  - /url: /job/devsecops-factory/2/configure
+  - text: Edit Build Information
+- link "Delete build ‘#2’":
+  - /url: /job/devsecops-factory/2/confirmDelete
+  - text: Delete build ‘#2’
+- link "Parameters":
+  - /url: /job/devsecops-factory/2/parameters
+  - text: Parameters
+- link "Git Build Data":
+  - /url: /job/devsecops-factory/2/git
+  - text: Git Build Data
+- link "Git Build Data":
+  - /url: /job/devsecops-factory/2/git-2
+  - text: Git Build Data
+- link "Git Build Data":
+  - /url: /job/devsecops-factory/2/git-3
+  - text: Git Build Data
+- link "See Fingerprints":
+  - /url: /job/devsecops-factory/2/fingerprints
+  - text: See Fingerprints
+- link "Open Blue Ocean":
+  - /url: /blue/organizations/jenkins/devsecops-factory/detail/devsecops-factory/2/
+  - text: Open Blue Ocean
+- link "Restart from Stage":
+  - /url: /job/devsecops-factory/2/restart
+  - text: Restart from Stage
+- link "Replay":
+  - /url: /job/devsecops-factory/2/replay
+  - text: Replay
+- link "Pipeline Steps":
+  - /url: /job/devsecops-factory/2/flowGraphTable
+  - text: Pipeline Steps
+- link "Workspaces":
+  - /url: /job/devsecops-factory/2/ws
+  - text: Workspaces
+- link "Previous Build":
+  - /url: /job/devsecops-factory/1/
+  - text: Previous Build
+- generic: Success
+- heading "#2 (29 Jul 2026, 09:33:42)" [level=1]
+- link "Edit description":
+  - /url: editDescription
+  - text: Edit description
+- button "Keep this build forever"
+- generic: cicd-gitops -> 1dba575f066c
+- generic: Started 24 min ago
+- text: Took
+- link "21 min":
+  - /url: /job/devsecops-factory/buildTimeTrend
+- table:
+  - rowgroup:
+    - row "Build Artifacts":
+      - cell:
+      - cell "Build Artifacts":
+        - link:
+          - /url: /job/devsecops-factory/2/artifact/
+        - link "Build Artifacts":
+          - /url: /job/devsecops-factory/2/artifact/
+    - row "Started by user admin":
+      - cell:
+      - cell "Started by user admin":
+        - paragraph:
+          - text: Started by user
+          - link "admin":
+            - /url: /user/admin
+            - text: admin
+            - button
+    - 'row "Revision: 1dba575f066cdbdc062886e02e06c6134a49c0c8 Repository: file:///workspace/source refs/remotes/origin/cicd-gitops"':
+      - cell:
+      - 'cell "Revision: 1dba575f066cdbdc062886e02e06c6134a49c0c8 Repository: file:///workspace/source refs/remotes/origin/cicd-gitops"':
+        - strong: Revision
+        - text: ": 1dba575f066cdbdc062886e02e06c6134a49c0c8"
+        - strong: Repository
+        - text: ": file:///workspace/source"
+        - list:
+          - listitem: refs/remotes/origin/cicd-gitops
+    - 'row "Revision: 1dba575f066cdbdc062886e02e06c6134a49c0c8 Repository: git://gitops-git-server:9418/devsecops.git refs/remotes/origin/cicd-gitops"':
+      - cell:
+      - 'cell "Revision: 1dba575f066cdbdc062886e02e06c6134a49c0c8 Repository: git://gitops-git-server:9418/devsecops.git refs/remotes/origin/cicd-gitops"':
+        - strong: Revision
+        - text: ": 1dba575f066cdbdc062886e02e06c6134a49c0c8"
+        - strong: Repository
+        - text: ": git://gitops-git-server:9418/devsecops.git"
+        - list:
+          - listitem: refs/remotes/origin/cicd-gitops
+    - row "This was approved by user admin.":
+      - cell:
+      - cell "This was approved by user admin.":
+        - text: This was approved by user
+        - link "admin":
+          - /url: /user/admin
+        - text: .
+    - 'row "Revision: 20158d0e045c51c0be68726eaec4869159aed237 Repository: git://gitops-git-server:9418/devsecops.git refs/remotes/origin/cicd-gitops"':
+      - cell:
+      - 'cell "Revision: 20158d0e045c51c0be68726eaec4869159aed237 Repository: git://gitops-git-server:9418/devsecops.git refs/remotes/origin/cicd-gitops"':
+        - strong: Revision
+        - text: ": 20158d0e045c51c0be68726eaec4869159aed237"
+        - strong: Repository
+        - text: ": git://gitops-git-server:9418/devsecops.git"
+        - list:
+          - listitem: refs/remotes/origin/cicd-gitops
+- table:
+  - rowgroup:
+    - row "No changes.":
+      - cell:
+      - cell "No changes."

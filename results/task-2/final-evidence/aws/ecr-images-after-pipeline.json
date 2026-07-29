@@ -1,0 +1,19 @@
+{
+    "imageDetails": [
+        {
+            "registryId": "585572506644",
+            "repositoryName": "devsecops/tetris",
+            "imageDigest": "sha256:4c07c345625d39f6afaf2103f70b3d5ba97bfab1420e36efa0ca2fc74021be66",
+            "imageTags": [
+                "latest",
+                "1dba575f066c"
+            ],
+            "imageSizeInBytes": 23454995,
+            "imagePushedAt": "2026-07-29T16:38:04.646000+07:00",
+            "imageManifestMediaType": "application/vnd.docker.distribution.manifest.v2+json",
+            "artifactMediaType": "application/vnd.docker.container.image.v1+json",
+            "lastRecordedPullTime": "2026-07-29T16:38:48.298000+07:00",
+            "imageStatus": "ACTIVE"
+        }
+    ]
+}
