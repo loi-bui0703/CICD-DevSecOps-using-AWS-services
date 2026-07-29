@@ -4,7 +4,16 @@ title = "DevSecOps Factory Gitleaks configuration"
 useDefault = true
 
 [allowlist]
-description = "Jenkins plugin lock entries are public plugin checksums, not credentials."
+description = "Ignore verified non-secret checksums and immutable finding snapshots whose issueKey UUIDs trigger generic-api-key."
 paths = [
   '''(^|/)ci/plugins\.txt$''',
+  '''^results/task-2/final-evidence/aws/securityhub-imported-findings\.json$''',
+  '''^results/task-2/final-evidence/jenkins-artifacts/build-2/archive/scan-reports/asff/securityhub-asff\.json$''',
+  '''^results/task-2/final-evidence/jenkins-artifacts/build-2/archive/scan-reports/normalized/findings\.json$''',
+  '''^results/task-2/final-evidence/jenkins-artifacts/build-2/archive/scan-reports/raw/sast/sonar-issues\.json$''',
+  '''^results/task-2/final-evidence/jenkins-artifacts/build-2/archive/scan-reports/sonar-issues\.json$''',
+  '''^results/task-2/final-evidence/jenkins-artifacts/build-6/archive/scan-reports/asff/securityhub-asff\.json$''',
+  '''^results/task-2/final-evidence/jenkins-artifacts/build-6/archive/scan-reports/normalized/findings\.json$''',
+  '''^results/task-2/final-evidence/jenkins-artifacts/build-6/archive/scan-reports/raw/sast/sonar-issues\.json$''',
+  '''^results/task-2/final-evidence/jenkins-artifacts/build-6/archive/scan-reports/sonar-issues\.json$''',
 ]

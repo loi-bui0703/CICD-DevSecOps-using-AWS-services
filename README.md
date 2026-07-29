@@ -1,13 +1,15 @@
 # DevSecOps Factory on AWS
 
-Dự án tích hợp mã nguồn của Task 1–4 thành một luồng hoàn chỉnh trên branch
-`cicd-gitops`: React Tetris → Jenkins security gates → Docker → Amazon ECR →
-ECS Fargate staging → S3/Lambda/Security Hub → manual approval → ECS Fargate
-production. Argo CD và k3d cung cấp đường GitOps local; Prometheus/Grafana cung
-cấp quan sát local, còn CloudWatch nhận log và Container Insights trên AWS.
-
-> This repository combines Tasks 1–4 into one runnable DevSecOps workflow.
-> Vietnamese is the primary operational language; the English summary is below.
+```text
+React Tetris
+  -> Jenkins security gates
+  -> Docker/ECR
+  -> ECS staging + local GitOps staging
+  -> ZAP DAST
+  -> S3/Lambda/Security Hub
+  -> manual approval
+  -> ECS production + local GitOps production
+```
 
 ## Kiến trúc
 
@@ -32,26 +34,114 @@ flowchart LR
   B --> Q["Prometheus + Grafana (local)"]
 ```
 
-## Phần đã tích hợp
-
-| Phạm vi | Thành phần chính |
+| Mục tiêu | Lệnh chính |
 |---|---|
-| Task 1 – AWS | Terraform cho Budget, IAM, ECR, VPC, ALB, ECS Fargate, S3, CloudWatch và Lambda/Security Hub tùy chọn |
-| Task 2 – CI/CD | Jenkins pipeline 21 stage, ECR, ECS, GitOps, S3, production approval và immutable SHA tag |
-| Task 3 – Security | Gitleaks, Trivy, SonarQube, Checkov, ZAP, schema report thống nhất và ASFF |
-| Task 4 – App | React app, multi-stage Dockerfile, hardened Kustomize overlays và ECS task-definition mẫu |
-| Hoàn thiện chung | Compose thống nhất, Prometheus/Grafana/Blackbox, test report pipeline, validation và cleanup scripts |
+| Chỉ kiểm tra source/config | `scripts/validate.sh` |
+| Khởi động toàn bộ nền tảng local | `make bootstrap` |
+| Chạy pipeline hoàn chỉnh local + AWS | `make demo-trigger` sau khi chuẩn bị AWS |
+| Tắt local nhưng giữ dữ liệu | `make down` và `k3d cluster stop devsecops` |
+| Đưa hai ECS service về 0 | `AWS_PROFILE_NAME=devsecops-factory make demo-reset` |
+| Xóa hẳn tài nguyên AWS | Quy trình **Xóa toàn bộ AWS** ở cuối README |
 
-## Chạy local
+`make bootstrap` chỉ dựng nền tảng local và không tạo hạ tầng AWS.
+`make demo-trigger` mới chạy preset tích hợp đầy đủ, do đó cần Terraform outputs
+và AWS credentials hợp lệ.
 
-Yêu cầu: Docker Desktop/Engine, `make`, `kubectl`, Python 3 và tối thiểu 8 GB
-RAM khả dụng nếu chạy cả Jenkins lẫn SonarQube.
+## Yêu cầu
+
+- macOS/Linux hoặc WSL2; cấu hình hiện tại đã được kiểm chứng trên macOS với
+  Docker Desktop.
+- Docker Desktop/Engine, Git và GNU Make.
+- `kubectl`, `helm` và `k3d` cho Kubernetes/Argo CD local.
+- Python 3, `jq`, `curl` và Terraform 1.x.
+- AWS CLI v2 với profile `devsecops-factory` cho luồng AWS.
+- Node.js/npm chỉ bắt buộc khi build frontend trực tiếp trên máy host.
+- Cần kết nối Internet ở lần đầu để tải container images, Helm chart,
+  Terraform providers và Argo CD manifests.
+- Khuyến nghị 10–12 GB RAM và ít nhất 25 GB dung lượng trống cho Docker. Lần
+  chạy đầu cần tải Jenkins, SonarQube, k3d và image OWASP ZAP khá lớn.
+- Các cổng cần trống: `80`, `443`, `3000`, `5001`, `6443`, `8080`, `9000`,
+  `9090` và `9418`.
+
+Kiểm tra nhanh:
 
 ```bash
+docker version
+git --version
+make --version
+kubectl version --client
+helm version
+k3d version
+terraform version
+aws --version
+jq --version
+python3 --version
+```
+
+## 1. Chuẩn bị lần đầu
+
+Luôn chạy lệnh từ thư mục root. Hai Argo CD Application local hiện theo dõi
+branch `cicd-gitops`, vì vậy hãy dùng đúng branch, còn không thì modify code nhé
+
+```bash
+cd /Users/loibui/Downloads/devsecops-factory/task-2
+git switch cicd-gitops
 make setup-env
-# Sửa .env và thay toàn bộ giá trị change-me-before-use.
-make up
+```
+
+Mở `.env` và thay placeholder. Không commit file này. Local platform cần tối
+thiểu:
+
+```dotenv
+JENKINS_ADMIN_PASS=<mật-khẩu-mạnh>
+GRAFANA_ADMIN_PASSWORD=<mật-khẩu-mạnh>
+```
+
+Preset `FULL_PROJECT_DEMO` cần thêm:
+
+```dotenv
+SONAR_TOKEN=<token-từ-SonarQube>
+AWS_ACCESS_KEY_ID=<access-key-của-IAM-Jenkins>
+AWS_SECRET_ACCESS_KEY=<secret-key-của-IAM-Jenkins>
+```
+
+`GITHUB_TOKEN` không bắt buộc cho demo hiện tại vì Jenkins và Argo CD dùng Git
+remote local `gitops-git-server`. Không in nội dung `.env` ra terminal công
+khai hoặc đưa nó vào ảnh minh chứng.
+
+Nếu cần tạo Sonar token lần đầu:
+
+1. Chạy `make up-security`.
+2. Mở <http://localhost:9000>, hoàn tất đăng nhập/quản trị và tạo token.
+3. Cập nhật `SONAR_TOKEN` trong `.env`.
+4. Sau khi Jenkins được bật, chạy `docker compose restart jenkins` để JCasC nạp
+   credential mới.
+
+## 2. Khởi động toàn bộ nền tảng local
+
+Sau khi `.env` đã sẵn sàng:
+
+```bash
+make bootstrap
 make status
+```
+
+`make bootstrap` thực hiện:
+
+1. Tạo Docker network và bật Jenkins, Docker-in-Docker, local registry,
+   SonarQube, Prometheus, Grafana và Blackbox Exporter.
+2. Tạo mới hoặc khởi động lại cluster k3d `devsecops`.
+3. Cài ingress-nginx và Argo CD.
+4. Seed branch hiện tại vào Git remote local.
+5. Tạo Argo CD Application staging và production.
+
+Lần đầu có thể mất vài phút. Kiểm tra platform:
+
+```bash
+docker compose ps
+export KUBECONFIG="$HOME/.kube/devsecops-local.kubeconfig"
+kubectl get pods -A
+kubectl get applications -n argocd
 ```
 
 Các URL mặc định:
@@ -61,8 +151,40 @@ Các URL mặc định:
 - Prometheus: <http://localhost:9090>
 - Grafana: <http://localhost:3000>
 - Docker Registry: `localhost:5001`
+- Tetris staging: <http://tetris-staging.localhost>
+- Tetris production: <http://tetris-production.localhost>
 
-Chạy riêng từng lớp:
+Muốn mở Argo CD UI, chạy lệnh dưới đây trong một terminal riêng rồi truy cập
+<http://localhost:8443>:
+
+```bash
+export KUBECONFIG="$HOME/.kube/devsecops-local.kubeconfig"
+kubectl port-forward -n argocd svc/argocd-server 8443:80
+```
+
+Username mặc định là admin, còn mật khẩu lấy từ secret Kubernetes bằng lệnh sau trên macOS:
+
+```bash
+export KUBECONFIG="$HOME/.kube/devsecops-local.kubeconfig"
+
+kubectl -n argocd get secret argocd-initial-admin-secret \
+  -o jsonpath='{.data.password}' | base64 -D
+
+echo
+```
+
+Nếu `.localhost` không được hệ điều hành tự phân giải, thêm:
+
+```text
+127.0.0.1 tetris-staging.localhost tetris-production.localhost
+```
+
+Trên một máy hoàn toàn mới, hai Tetris Deployment có thể tạm thời báo
+`ImagePullBackOff` vì local registry chưa có image. Pipeline
+`FULL_PROJECT_DEMO` sẽ build, scan, mirror image vào registry và cập nhật
+GitOps bằng immutable SHA tag.
+
+Muốn bật riêng từng lớp:
 
 ```bash
 make up-infra
@@ -70,168 +192,231 @@ make up-security
 make up-obs
 ```
 
-## GitOps local với k3d
+## 3. Kiểm thử source và cấu hình
 
 ```bash
-make k3d-create
-make k3d-configure
-make argocd-install
-kubectl apply -f cd/apps/staging.yaml
-kubectl apply -f cd/apps/production.yaml
+scripts/validate.sh
+FULL_BUILD=true scripts/validate.sh
 ```
 
-Thêm vào `/etc/hosts` nếu hệ điều hành không tự ánh xạ `.localhost`:
+Lệnh đầu kiểm tra shell, Python report/ASFF, Kustomize, Docker Compose, JSON,
+monitoring và Terraform. Lệnh thứ hai chạy thêm `npm ci` và production build
+của React app.
+
+## 4. Chuẩn bị hạ tầng AWS
+
+Nếu hạ tầng đã tồn tại, không apply lại đại: đăng nhập và chạy
+`terraform plan`; kết quả mong đợi là `No changes`.
+
+```bash
+aws sso login --profile devsecops-factory
+AWS_PROFILE=devsecops-factory \
+  terraform -chdir=infrastructure/terraform plan
+```
+
+Nếu đây là account/môi trường mới, tạo `terraform.tfvars` và review plan trước
+khi apply:
+
+```bash
+aws sso login --profile devsecops-factory
+export AWS_PROFILE=devsecops-factory
+aws sts get-caller-identity --profile devsecops-factory
+
+test -e infrastructure/terraform/terraform.tfvars || \
+  cp infrastructure/terraform/terraform.tfvars.example \
+    infrastructure/terraform/terraform.tfvars
+
+# Sửa email Budget và bật hai tùy chọn sau để chạy đủ luồng:
+# enable_security_hub_importer = true
+# create_local_jenkins_user     = true
+
+terraform -chdir=infrastructure/terraform init
+terraform -chdir=infrastructure/terraform fmt -check
+terraform -chdir=infrastructure/terraform validate
+terraform -chdir=infrastructure/terraform plan -out=tfplan
+terraform -chdir=infrastructure/terraform apply tfplan
+terraform -chdir=infrastructure/terraform output
+```
+
+Terraform không quản lý access key. Nếu dùng Jenkins local, tạo một access key
+cho IAM user từ output `jenkins_ci_user_name`, đưa key vào `.env`, rồi restart
+Jenkins để JCasC cập nhật credential `aws-credentials`. Không commit, chia sẻ
+hoặc lưu key trong ảnh minh chứng. Jenkins chạy trong AWS nên dùng IAM
+role/default credential chain thay cho key dài hạn.
+
+Giữ `staging_desired_count` và `production_desired_count` bằng `0` ngoài thời
+gian demo. Hai ALB vẫn có thể phát sinh phí dù ECS đã scale về 0.
+
+## 5. Chạy pipeline end-to-end
+
+Jenkins checkout source đã commit trong branch hiện tại. Trước khi chạy, bảo
+đảm working tree sạch, local platform đang bật, Terraform outputs tồn tại và
+AWS credentials trong `.env` còn hiệu lực:
+
+```bash
+git status --short
+make up
+make k3d-create
+make gitops-seed
+make argocd-apps
+
+aws sso login --profile devsecops-factory
+AWS_PROFILE_NAME=devsecops-factory make demo-reset
+
+# Chỉ preflight, chưa tạo Jenkins build: (action này yêu cầu working tree sạch, push all changes)
+./scripts/demo-trigger.sh --dry-run
+
+# Trigger preset FULL_PROJECT_DEMO:
+make demo-trigger
+```
+
+`demo-trigger.sh` tự tạo Jenkins job nếu chưa có và đọc ECR, ECS, S3, ALB cùng
+Lambda từ Terraform outputs. Luồng gồm 22 stage:
 
 ```text
-127.0.0.1 tetris-staging.localhost tetris.localhost
+checkout/validate
+  -> Gitleaks + Trivy SCA + SonarQube + Checkov
+  -> Docker build + container scan
+  -> ECR push + local registry mirror
+  -> GitOps staging + ECS staging
+  -> ZAP DAST
+  -> normalize reports + ASFF + S3 + Lambda/Security Hub
+  -> manual production approval
+  -> GitOps production + ECS production
+  -> summary/archive artifacts
 ```
 
-Argo CD đang trỏ tới repository/branch khai báo trong `cd/apps/*.yaml`. Hãy đổi
-`repoURL` nếu bản tích hợp được đẩy sang repository khác.
+Terminal sẽ in URL console và manual gate. Mở Jenkins, đợi stage
+`19. Production Approval`, kiểm tra staging rồi chọn **Proceed** trong vòng 30
+phút. Lần đầu thường lâu hơn do tải scanner/cache, đặc biệt là OWASP ZAP.
 
-## Jenkins
-
-Tạo Multibranch Pipeline hoặc Pipeline from SCM với script path
-`ci/Jenkinsfile`. Build mặc định an toàn cho local:
-
-- `REGISTRY_TARGET=local`
-- `SECURITY_MODE=stub`
-- các side effect AWS/GitOps mặc định tắt
-
-Jenkins dùng Docker-in-Docker cô lập trên network `devsecops`; controller không
-chạy bằng root và không gắn Docker socket của máy host. Docker engine vẫn chạy
-privileged bên trong Docker Desktop VM, vì vậy chỉ khởi động stack từ source đã
-tin cậy và dừng stack khi kết thúc demo.
-
-`ci/jenkins-job.xml` dùng bản clone local được mount read-only tại
-`/workspace/source`, phù hợp khi GitHub repository là private nhưng chưa cấp PAT
-cho Jenkins. Muốn dùng webhook/SCM trực tiếp, đổi URL trong job sang GitHub và
-gắn credential `github-token`.
-
-Luồng demo đầy đủ dùng:
-
-- `DEMO_PRESET=FULL_AWS_DEMO` khi chạy qua `scripts/demo-trigger.sh`
-- `REGISTRY_TARGET=ecr`
-- `IMAGE_PLATFORM=linux/amd64` cho ECS Fargate mặc định
-- `SECURITY_MODE=enforce`
-- `SECURITY_BLOCK_SEVERITIES=CRITICAL` (hoặc `CRITICAL,HIGH`)
-- `ENABLE_ECS_DEPLOY=true`
-- `ENABLE_DAST=true`, `DAST_GATE_MODE=report-only` và `STAGING_URL` là URL ALB staging
-- `ENABLE_S3_UPLOAD=true`
-- `ENABLE_SECURITY_HUB_IMPORT=false` trong preset; chỉ bật ở custom build nếu Terraform đã bật importer
-- `PROMOTE_PRODUCTION=true` để chờ manual approval
-
-Pipeline dùng một tag 12 ký tự từ commit SHA cho cả staging và production.
-Không ghi AWS key, GitHub token hoặc Sonar token vào repository.
-
-### Demo AWS lặp lại
-
-Jenkins checkout commit từ branch local, vì vậy hãy commit thay đổi trước khi
-demo; không cần push GitHub. Giữ named volumes để cache Jenkins history,
-Checkov, ZAP, Gitleaks và Trivy. Không dùng `docker compose down -v`.
+## 6. Xác minh sau pipeline
 
 ```bash
-cd /Users/loibui/Downloads/devsecops-factory/task-2
-aws sso login --profile devsecops-factory
-docker compose -f docker-compose.infra.yml up -d --build
+export KUBECONFIG="$HOME/.kube/devsecops-local.kubeconfig"
+kubectl get applications -n argocd
+kubectl get deploy,pod,ingress -n staging
+kubectl get deploy,pod,ingress -n production
 
-# Đưa hai ECS service về desired count 0, không destroy Terraform:
-AWS_PROFILE_NAME=devsecops-factory make demo-reset
+curl -I http://tetris-staging.localhost
+curl -I http://tetris-production.localhost
 
-# Tự đọc Terraform outputs và trigger preset đầy đủ:
-make demo-trigger
+aws ecs describe-services \
+  --profile devsecops-factory \
+  --region ap-southeast-1 \
+  --cluster devsecops-factory-cluster \
+  --services tetris-staging tetris-production \
+  --query 'services[].{service:serviceName,desired:desiredCount,running:runningCount,taskDefinition:taskDefinition}'
 
-# Chỉ kiểm tra preset/outputs, không trigger full build:
-./scripts/demo-trigger.sh --dry-run
+terraform -chdir=infrastructure/terraform output -raw alb_dns_staging
+terraform -chdir=infrastructure/terraform output -raw alb_dns_production
 ```
 
-`demo-trigger` tự điền ECR, S3 bucket, staging URL, ECS family/cluster,
-security enforce, DAST report-only và production manual gate. Script chỉ in URL
-console/gate, không in Jenkins password hoặc AWS key. Nếu Jenkins chưa biết
-parameter mới, script tự chạy một seed build local-safe trước. Khi kết thúc:
+Kết quả mong đợi:
+
+- Jenkins build `SUCCESS`, đủ 22 stage và artifacts trong `scan-reports/`.
+- Hai Argo CD Application ở trạng thái `Synced` và `Healthy`.
+- Hai URL local trả HTTP `200`.
+- ECR có image với tag 12 ký tự của commit.
+- ECS staging/production chạy task definition mới sau promotion.
+- S3 có security reports; Lambda chạy không lỗi; Security Hub nhận findings.
+- Prometheus targets đều `UP`; Grafana dashboard hiển thị availability.
+
+## 7. Dừng sau khi demo (Dừng local, tài nguyên AWS còn chạy)
+
+Scale ECS về 0 trước để giảm chi phí, rồi dừng local. Không dùng `-v` nếu muốn
+giữ Jenkins history, SonarQube data và scanner cache:
 
 ```bash
 AWS_PROFILE_NAME=devsecops-factory make demo-reset
-docker compose -f docker-compose.infra.yml down
+make down
+k3d cluster stop devsecops
 ```
 
-## Triển khai AWS
+`make down` không xóa named volumes. `make clean` xóa container local và
+cluster k3d nhưng không destroy AWS.
 
-Không chạy `terraform apply` trước khi xem chi phí và xác nhận email Budget:
-
-```bash
-cd infrastructure/terraform
-cp terraform.tfvars.example terraform.tfvars
-terraform init
-terraform fmt -check
-terraform validate
-terraform plan -out=tfplan
-terraform apply tfplan
-terraform output
-```
-
-Các task ECS mặc định bằng `0` để tránh phí Fargate ngoài giờ demo. Jenkins sẽ
-scale chúng khi deploy, hoặc dùng:
-
-```bash
-scripts/scale-ecs.sh up
-scripts/scale-ecs.sh down
-```
-
-`enable_security_hub_importer=false` theo mặc định. Chỉ chuyển thành `true` nếu
-muốn bật Security Hub và Lambda S3 trigger. Gắn output
-`jenkins_ci_policy_arn` vào IAM principal của Jenkins; ưu tiên IAM role/default
-credential chain thay vì access key dài hạn.
-
-### Tắt hoàn toàn sau demo
-
-Có hai mức cleanup khác nhau:
-
-- `make demo-reset` chỉ đưa ECS staging/production về `desiredCount=0`. Cách này
-  phù hợp khi sắp demo lại, nhưng hai ALB, ECR, S3 và tài nguyên khác vẫn tồn tại
-  và một số dịch vụ vẫn có thể tính phí.
-- `terraform destroy` xoá hạ tầng AWS của dự án. Hãy dùng cách này khi kết thúc
-  buổi demo và muốn ngăn chi phí mới từ các tài nguyên đó.
-
-Quy trình dưới đây xoá ECS, ALB, ECR cùng toàn bộ image, S3 cùng report,
-CloudWatch log group, VPC, IAM Jenkins, Budget và các tài nguyên Terraform liên
-quan. S3 report, ECR image và Jenkins AWS access key sẽ không thể khôi phục.
-
-#### 1. Ngăn Jenkins tạo deployment mới và tắt local stack
-
-Đảm bảo không có Jenkins build đang chạy hoặc đang chờ nút production gate, rồi
-chạy:
-
-```bash
-cd /Users/loibui/Downloads/devsecops-factory/task-2
-
-# Chạy cả bốn lệnh là an toàn dù trước đó chỉ bật một phần stack.
-docker compose -f docker-compose.infra.yml down --remove-orphans
-docker compose -f docker-compose.security.yml down --remove-orphans
-docker compose -f docker-compose.obs.yml down --remove-orphans
-docker compose down --remove-orphans
-
-# Xoá riêng cluster Kubernetes local nếu đã tạo.
-make k3d-delete
-```
-
-Không thêm `-v` nếu muốn giữ Jenkins history, scanner cache và dữ liệu local cho
-lần demo sau. Named volume nằm trên máy cá nhân và không phát sinh phí AWS.
-
-#### 2. Đăng nhập và kiểm tra đúng AWS account
+## 8. Dừng toàn bộ tài nguyên AWS
 
 ```bash
 aws sso login --profile devsecops-factory
 aws sts get-caller-identity --profile devsecops-factory
+
+AWS_PROFILE=devsecops-factory \
+EXPECTED_AWS_ACCOUNT_ID=585572506644 \
+CONFIRM_AWS_CLEANUP=devsecops-factory \
+DESTROY_TERRAFORM=true \
+./scripts/cleanup-aws.sh
 ```
 
-Kiểm tra trường `Account` là account đã dùng để demo. Với môi trường hiện tại,
-Account ID phải là `585572506644` (bốn số cuối `6644`). Không tiếp tục nếu ID
-khác, vì `terraform destroy` sẽ thao tác trên account đang đăng nhập.
+## Jenkins và bảo mật runtime
 
-#### 3. Xem destroy plan và xoá toàn bộ AWS project
+Build mặc định an toàn cho local dùng `REGISTRY_TARGET=local`,
+`SECURITY_MODE=stub` và tắt side effect AWS/GitOps. Demo đầy đủ dùng
+`SECURITY_MODE=enforce`, chặn `CRITICAL`, bật SAST/DAST, ECR/ECS,
+S3/Lambda/Security Hub, local GitOps mirror và production approval.
 
-Chạy cleanup script từ thư mục gốc repository:
+Jenkins dùng Docker-in-Docker cô lập trên network `devsecops`; controller không
+gắn Docker socket host. Docker engine vẫn chạy privileged bên trong Docker
+Desktop VM, vì vậy chỉ chạy source tin cậy và dừng stack sau demo.
+
+`ci/jenkins-job.xml` checkout bản clone local được mount read-only tại
+`/workspace/source`; thay đổi chưa commit sẽ không được pipeline nhìn thấy và
+`demo-trigger.sh` chủ động từ chối working tree bẩn. Pipeline dùng cùng một
+immutable SHA tag cho staging và production.
+
+## Lỗi thường gặp
+
+| Hiện tượng | Kiểm tra/cách xử lý |
+|---|---|
+| `permission denied` với Docker socket | Mở Docker Desktop và chờ engine sẵn sàng |
+| Cổng đã được sử dụng | Dùng `lsof -nP -iTCP:<port> -sTCP:LISTEN`, rồi dừng dịch vụ xung đột |
+| Jenkins chưa healthy | `make logs SVC=jenkins`; lần build image đầu có thể mất vài phút |
+| SonarQube chưa sẵn sàng | `make logs SVC=sonarqube`; kiểm tra RAM Docker và token trong `.env` |
+| `demo-trigger` báo working tree bẩn | Commit thay đổi cần chạy; Jenkins chỉ checkout nội dung đã commit |
+| `demo-trigger` báo thiếu Terraform output | Chạy `terraform init/plan/apply` và bật Security Hub importer |
+| AWS credential lỗi trong Jenkins | Cập nhật `.env`, kiểm tra IAM key còn hiệu lực, rồi restart Jenkins |
+| Argo CD app `OutOfSync`/`Unknown` | `make gitops-seed`, `make argocd-apps`, rồi xem controller logs |
+| Pod `ImagePullBackOff` | Kiểm tra `curl http://localhost:5001/v2/_catalog`; chạy pipeline để mirror image |
+| ALB trả 503 lúc đầu | Chờ ECS service stable và target group healthy |
+| ZAP mất nhiều thời gian | Lần đầu phải tải image lớn; giữ named volume/cache và không dùng `down -v` |
+
+Các lệnh chẩn đoán:
+
+```bash
+make status
+docker compose ps
+docker compose logs --tail=200 jenkins sonarqube prometheus grafana
+
+export KUBECONFIG="$HOME/.kube/devsecops-local.kubeconfig"
+kubectl get pods -A
+kubectl describe application tetris-staging -n argocd
+kubectl describe application tetris-production -n argocd
+```
+
+## Xóa toàn bộ AWS sau demo
+
+Có hai mức cleanup:
+
+- `make demo-reset` chỉ đưa ECS staging/production về `desiredCount=0`. ALB,
+  ECR, S3 và tài nguyên Terraform vẫn tồn tại và có thể tiếp tục phát sinh phí.
+- `DESTROY_TERRAFORM=true ./scripts/cleanup-aws.sh` xóa hạ tầng AWS của dự án.
+  Đây là thao tác phá hủy dữ liệu.
+
+Trước khi destroy, bảo đảm không có Jenkins build đang chạy/chờ approval, dừng
+local stack và kiểm tra đúng account:
+
+```bash
+make down
+k3d cluster stop devsecops
+
+aws sso login --profile devsecops-factory
+aws sts get-caller-identity --profile devsecops-factory
+```
+
+Với môi trường hiện tại, account ID đã kiểm chứng là `585572506644`. Không tiếp
+tục nếu đang đăng nhập account khác. Xem destroy plan và chỉ nhập `yes` khi
+phạm vi đúng:
 
 ```bash
 AWS_PROFILE=devsecops-factory \
@@ -241,96 +426,15 @@ DESTROY_TERRAFORM=true \
 ./scripts/cleanup-aws.sh
 ```
 
-Script sẽ scale ECS về `0`, hiển thị Terraform destroy plan và chờ xác nhận.
-Đọc dòng tổng kết: plan phải có `0 to add`, `0 to change` và chỉ có tài nguyên
-`to destroy`. Nhập chính xác `yes` để tiếp tục. Có thể mất 5–15 phút vì AWS cần
-drain ECS và thu hồi network interface trước khi xoá ALB/VPC.
+Quy trình này có thể xóa ECS, ALB, ECR images, S3 reports, Lambda, Security Hub
+integration, CloudWatch log groups, VPC, IAM Jenkins, Budget và các tài nguyên
+Terraform liên quan. Dữ liệu bị xóa không thể khôi phục.
 
-Terraform đã bật `force_delete` cho ECR và `force_destroy` cho IAM Jenkins, nên
-image cùng access key do Jenkins dùng cũng được thu hồi. Sau khi Terraform hoàn
-tất, script deregister các revision `tetris-app` do Jenkins tạo ngoài Terraform
-và chỉ thành công khi Terraform state đã rỗng.
-
-#### 4. Kiểm tra kết quả
-
-Lệnh đầu tiên phải không in tài nguyên nào. Các lệnh AWS còn lại phải trả về
-`[]` hoặc `0`:
+Kiểm tra state đã rỗng:
 
 ```bash
 terraform -chdir=infrastructure/terraform state list
-
-aws elbv2 describe-load-balancers \
-  --profile devsecops-factory --region ap-southeast-1 \
-  --query "LoadBalancers[?contains(LoadBalancerName, 'devsecops-factory')].LoadBalancerName"
-
-aws ecs list-clusters \
-  --profile devsecops-factory --region ap-southeast-1 \
-  --query "clusterArns[?contains(@, 'devsecops-factory')]"
-
-aws ecs list-task-definitions \
-  --profile devsecops-factory --region ap-southeast-1 \
-  --family-prefix tetris-app --status ACTIVE \
-  --query "length(taskDefinitionArns)"
-
-aws ecr describe-repositories \
-  --profile devsecops-factory --region ap-southeast-1 \
-  --query "repositories[?contains(repositoryName, 'devsecops')].repositoryName"
-
-aws s3api list-buckets \
-  --profile devsecops-factory \
-  --query "Buckets[?starts_with(Name, 'devsecops-reports-')].Name"
-
-aws ec2 describe-vpcs \
-  --profile devsecops-factory --region ap-southeast-1 \
-  --filters Name=tag:Name,Values=devsecops-factory-vpc \
-  --query "Vpcs[].VpcId"
-
-docker ps -a --format '{{.Names}}' |
-  grep -E '^(jenkins|devsecops-docker-engine|local-registry|sonarqube|prometheus|grafana|blackbox-exporter|k3d-devsecops)' |
-  wc -l
 ```
 
-AWS Cost Explorer có độ trễ, vì vậy chi phí đã phát sinh trước lúc destroy vẫn
-có thể xuất hiện sau đó. Destroy ngăn tài nguyên dự án tiếp tục tạo chi phí mới;
-nó không xoá chi phí đã sử dụng và không tác động tới tài nguyên khác trong
-account.
-
-#### 5. Chuẩn bị cho lần demo tiếp theo
-
-Sau full destroy, chạy lại Terraform `plan`/`apply` trong mục **Triển khai AWS**.
-IAM user Jenkins sẽ được tạo lại nhưng access key cũ trong `.env` đã bị thu hồi.
-Hãy tạo access key mới cho output `jenkins_ci_user_name`, cập nhật
-`AWS_ACCESS_KEY_ID` và `AWS_SECRET_ACCESS_KEY` trong `.env`, rồi khởi động
-Jenkins. Không tái sử dụng hoặc chia sẻ access key cũ.
-
-## Kiểm thử
-
-```bash
-scripts/validate.sh
-FULL_BUILD=true scripts/validate.sh
-```
-
-Script kiểm tra shell, Python report/ASFF, Kustomize, Docker Compose, JSON và
-Terraform. `FULL_BUILD=true` chạy thêm `npm ci` và build ứng dụng.
-
-## Giới hạn đã biết
-
-- Frontend giữ `react-scripts@3.4.0` và một số dependency cũ để phục vụ demo
-  SCA; xem `app/VULNERABILITIES.md`. Đây không phải baseline phù hợp cho
-  production thật.
-- Repository không chứa `.env`, Terraform state, AWS key, GitHub token hay
-  kubeconfig. Các giá trị này phải được cấp qua `.env`, Jenkins Credentials,
-  IAM role/SSO hoặc secret manager.
-- Terraform tạo hai ALB theo yêu cầu staging/production. Đây là phần có thể phát
-  sinh phí ngay cả khi ECS desired count bằng `0`.
-- Ảnh trong `results/` là bằng chứng lịch sử của từng task; kết quả tích hợp cuối
-  nên được chụp lại sau khi chạy trên tài khoản AWS đích.
-
-## English summary
-
-The integrated branch provides a local-safe stack and an opt-in AWS release
-path. Start locally with `make setup-env && make up`; validate with
-`scripts/validate.sh`. Provision AWS only after reviewing the Terraform plan.
-ECS tasks start at zero, Jenkins promotes an immutable commit-tagged image, and
-production requires manual approval. Security reports are normalized, uploaded
-to S3, and can be imported into Security Hub by an optional Lambda trigger.
+AWS Cost Explorer có độ trễ. Destroy ngăn tài nguyên dự án tiếp tục tạo chi phí
+mới nhưng không xóa chi phí đã phát sinh.

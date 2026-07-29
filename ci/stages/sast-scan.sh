@@ -10,17 +10,22 @@ SCAN_REPORT_DIR="${SCAN_REPORT_DIR:-$(pwd)/scan-reports}"
 RAW_SAST_DIR="${SCAN_REPORT_DIR}/raw/sast"
 ISSUES_REPORT="${RAW_SAST_DIR}/sonar-issues.json"
 LEGACY_ISSUES_REPORT="${SCAN_REPORT_DIR}/sonar-issues.json"
-TOOL_BASE_DIR="${WORKSPACE:-$(pwd)}/security/sast"
+TOOL_BASE_DIR="${SAST_TOOL_DIR:-${JENKINS_HOME:-${WORKSPACE:-$(pwd)}}/.tools/sast}"
 SCANNER_VERSION="${SONAR_SCANNER_VERSION:-5.0.1.3006}"
 SCANNER_HOME="${TOOL_BASE_DIR}/sonar-scanner"
-NODE_VERSION="${NODE_VERSION:-v22.11.0}"
+NODE_VERSION="${NODE_VERSION:-v24.18.0}"
 NODE_HOME="${TOOL_BASE_DIR}/nodejs"
+SONAR_SOURCES="${SONAR_SOURCES:-app/src}"
+SONAR_EXCLUSIONS="${SONAR_EXCLUSIONS:-**/node_modules/**,**/dist/**,**/build/**,**/.git/**,**/*.png,**/*.jpg,**/*.jpeg,**/*.gif}"
+export SONAR_SCANNER_OPTS="${SONAR_SCANNER_OPTS:--Xmx384m}"
+export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=768}"
 
 echo "============================================================"
 echo "  SAST SCAN - SonarQube"
 echo "  Sonar host  : ${SONAR_HOST}"
 echo "  Project key : ${SONAR_PROJECT_KEY}"
 echo "  Scan target : ${SCAN_DIR}"
+echo "  Sources     : ${SONAR_SOURCES}"
 echo "  Report file : ${ISSUES_REPORT}"
 echo "============================================================"
 
@@ -40,7 +45,7 @@ else
   fi
 fi
 
-if ! command -v node >/dev/null 2>&1; then
+if [ ! -x "${NODE_HOME}/bin/node" ]; then
   ARCH="$(uname -m)"
   case "${ARCH}" in
     x86_64|amd64) NODE_ARCH="linux-x64" ;;
@@ -52,9 +57,9 @@ if ! command -v node >/dev/null 2>&1; then
   mkdir -p "${NODE_HOME}"
   curl -sSLo /tmp/nodejs.tar.gz "https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-${NODE_ARCH}.tar.gz"
   tar -xzf /tmp/nodejs.tar.gz -C "${NODE_HOME}" --strip-components=1
-  export PATH="${NODE_HOME}/bin:${PATH}"
 fi
 
+export PATH="${NODE_HOME}/bin:${PATH}"
 node -v
 
 if [ ! -d "${SCAN_DIR}" ]; then
@@ -73,16 +78,21 @@ if [ "${SECURITY_MODE:-report-only}" = "enforce" ]; then
   )
 fi
 
+# Bash 3.2 (the default on macOS) treats an empty array expansion as unbound
+# when `set -u` is active. Disable nounset only for the scanner invocation so
+# report-only mode works consistently on macOS and Linux/Jenkins.
+set +u
 "${SCANNER_BIN}" \
   -Dsonar.projectKey="${SONAR_PROJECT_KEY}" \
-  -Dsonar.sources="." \
-  -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/build/**,**/.git/**" \
+  -Dsonar.sources="${SONAR_SOURCES}" \
+  -Dsonar.exclusions="${SONAR_EXCLUSIONS}" \
   -Dsonar.host.url="${SONAR_HOST}" \
   -Dsonar.login="${SONAR_TOKEN}" \
   -Dsonar.projectVersion="${IMAGE_TAG:-latest}" \
   -Dsonar.scm.disabled=true \
   "${QUALITY_GATE_ARGS[@]}" \
   "$@"
+set -u
 
 popd >/dev/null
 

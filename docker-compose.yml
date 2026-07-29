@@ -3,6 +3,11 @@ name: devsecops-factory
 # The module files remain independently runnable. `extends` assembles their
 # services without duplicating definitions or conflicting on shared resources.
 services:
+  git-server:
+    extends:
+      file: docker-compose.infra.yml
+      service: git-server
+
   local-registry:
     extends:
       file: docker-compose.infra.yml
@@ -44,6 +49,7 @@ networks:
     external: true
 
 volumes:
+  gitops_data:
   jenkins_home:
   registry_data:
   docker_data:
