@@ -16,8 +16,9 @@
 # =============================================================================
 
 .PHONY: help up up-infra up-security up-obs down restart status logs \
-        bootstrap k3d-create k3d-delete argocd-install argocd-apps \
-        build-agent setup-env gitops-seed demo-reset demo-trigger clean
+        bootstrap network-create k3d-create k3d-configure k3d-delete \
+        argocd-install argocd-apps build-agent setup-env gitops-seed \
+        demo-reset demo-trigger clean clean-volumes
 
 # Load .env if it exists
 ifneq (,$(wildcard .env))
@@ -44,7 +45,7 @@ help: ## Show this help
 
 ##@ First-time setup
 
-bootstrap: setup-env network-create up k3d-create k3d-configure argocd-install ## Full first-time bootstrap
+bootstrap: setup-env network-create up k3d-create k3d-configure argocd-install gitops-seed argocd-apps ## Full local platform bootstrap
 	@echo ""
 	@echo "$(GREEN)Bootstrap complete!$(NC)"
 	@make status
@@ -112,8 +113,9 @@ logs: ## Tail logs (usage: make logs SVC=jenkins)
 ##@ Kubernetes (k3d)
 
 k3d-create: ## Create local k3d cluster (replaces AWS EKS)
-	@if k3d cluster list 2>/dev/null | grep -q devsecops; then \
-	  echo "k3d cluster 'devsecops' already exists"; \
+	@if k3d cluster list --no-headers 2>/dev/null | grep -q '^devsecops[[:space:]]'; then \
+	  k3d cluster start devsecops; \
+	  echo "$(GREEN)Existing k3d cluster 'devsecops' is running$(NC)"; \
 	else \
 	  k3d cluster create --config infrastructure/k3d/cluster.yaml; \
 	  echo "$(GREEN)k3d cluster created$(NC)"; \
@@ -167,7 +169,7 @@ build-agent: ## [Linh] Build Jenkins agent image with all security tools
 demo-reset: ## Scale staging and production ECS services to zero
 	./scripts/demo-reset.sh --yes
 
-demo-trigger: ## Trigger the FULL_AWS_DEMO Jenkins preset
+demo-trigger: ## Trigger the FULL_PROJECT_DEMO Jenkins preset
 	./scripts/demo-trigger.sh
 
 ##@ Cleanup
