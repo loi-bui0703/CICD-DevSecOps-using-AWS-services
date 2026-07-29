@@ -1,6 +1,0 @@
-source_branch=cicd-gitops
-source_commit=bc0bc4f4760ad80a29236029e9b2433d91ee5e13
-image_uri=localhost:5001/devsecops/tetris:bc0bc4f4760a
-registry_target=local
-security_mode=stub
-release_branch=main

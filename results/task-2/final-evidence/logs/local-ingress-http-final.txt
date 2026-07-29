@@ -1,2 +1,0 @@
-staging HTTP 200
-production HTTP 200

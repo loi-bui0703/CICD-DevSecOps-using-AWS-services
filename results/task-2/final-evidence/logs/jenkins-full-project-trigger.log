@@ -1,5 +1,0 @@
-FULL_PROJECT_DEMO build #2 started.
-Console: http://localhost:8080/job/devsecops-factory/2/console
-Manual gate: http://localhost:8080/job/devsecops-factory/2/input/
-Image: 585572506644.dkr.ecr.ap-southeast-1.amazonaws.com/devsecops/tetris:<commit-sha>
-Staging URL: http://devsecops-factory-alb-staging-1252599894.ap-southeast-1.elb.amazonaws.com

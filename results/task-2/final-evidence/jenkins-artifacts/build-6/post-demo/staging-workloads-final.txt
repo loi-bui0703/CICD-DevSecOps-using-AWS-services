@@ -1,8 +1,0 @@
-NAME                     READY   UP-TO-DATE   AVAILABLE   AGE    CONTAINERS   IMAGES                                         SELECTOR
-deployment.apps/tetris   1/1     1            1           7h8m   tetris       localhost:5001/devsecops/tetris:5d2005dd0265   app=tetris
-
-NAME                          READY   STATUS    RESTARTS   AGE     IP            NODE                     NOMINATED NODE   READINESS GATES
-pod/tetris-56cf679b88-25fbf   1/1     Running   0          7m30s   10.42.0.115   k3d-devsecops-server-0   <none>           <none>
-
-NAME                               CLASS   HOSTS                      ADDRESS       PORTS   AGE
-ingress.networking.k8s.io/tetris   nginx   tetris-staging.localhost   10.43.196.2   80      7h8m

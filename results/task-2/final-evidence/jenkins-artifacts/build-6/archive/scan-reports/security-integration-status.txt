@@ -1,9 +1,0 @@
-security_mode=enforce
-dast_gate_mode=report-only
-demo_preset=FULL_PROJECT_DEMO
-ci/stages/secrets-scan.sh=ready
-ci/stages/sca-scan.sh=ready
-ci/stages/sast-scan.sh=ready
-ci/stages/iac-scan.sh=ready
-ci/stages/container-scan.sh=ready
-ci/stages/dast-scan.sh=ready

@@ -1,3 +1,0 @@
-NAME                SYNC STATUS   HEALTH STATUS   REVISION                                   PROJECT
-tetris-production   Synced        Healthy         cce79689770fd0d1881738df52a3cb9ad7899fcc   default
-tetris-staging      Synced        Healthy         cce79689770fd0d1881738df52a3cb9ad7899fcc   default
