@@ -322,7 +322,7 @@ Kết quả mong đợi:
 - S3 có security reports; Lambda chạy không lỗi; Security Hub nhận findings.
 - Prometheus targets đều `UP`; Grafana dashboard hiển thị availability.
 
-## 7. Dừng sau khi demo
+## 7. Dừng sau khi demo (Dừng local, tài nguyên AWS còn chạy)
 
 Scale ECS về 0 trước để giảm chi phí, rồi dừng local. Không dùng `-v` nếu muốn
 giữ Jenkins history, SonarQube data và scanner cache:
@@ -335,6 +335,19 @@ k3d cluster stop devsecops
 
 `make down` không xóa named volumes. `make clean` xóa container local và
 cluster k3d nhưng không destroy AWS.
+
+## 8. Dừng toàn bộ tài nguyên AWS
+
+```bash
+aws sso login --profile devsecops-factory
+aws sts get-caller-identity --profile devsecops-factory
+
+AWS_PROFILE=devsecops-factory \
+EXPECTED_AWS_ACCOUNT_ID=585572506644 \
+CONFIRM_AWS_CLEANUP=devsecops-factory \
+DESTROY_TERRAFORM=true \
+./scripts/cleanup-aws.sh
+```
 
 ## Jenkins và bảo mật runtime
 
