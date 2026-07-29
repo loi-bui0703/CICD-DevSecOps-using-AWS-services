@@ -12,4 +12,8 @@ paths = [
   '''^results/task-2/final-evidence/jenkins-artifacts/build-2/archive/scan-reports/normalized/findings\.json$''',
   '''^results/task-2/final-evidence/jenkins-artifacts/build-2/archive/scan-reports/raw/sast/sonar-issues\.json$''',
   '''^results/task-2/final-evidence/jenkins-artifacts/build-2/archive/scan-reports/sonar-issues\.json$''',
+  '''^results/task-2/final-evidence/jenkins-artifacts/build-6/archive/scan-reports/asff/securityhub-asff\.json$''',
+  '''^results/task-2/final-evidence/jenkins-artifacts/build-6/archive/scan-reports/normalized/findings\.json$''',
+  '''^results/task-2/final-evidence/jenkins-artifacts/build-6/archive/scan-reports/raw/sast/sonar-issues\.json$''',
+  '''^results/task-2/final-evidence/jenkins-artifacts/build-6/archive/scan-reports/sonar-issues\.json$''',
 ]

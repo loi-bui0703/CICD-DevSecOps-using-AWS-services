@@ -1,0 +1,16 @@
+[
+    {
+        "service": "tetris-staging",
+        "desired": 0,
+        "running": 0,
+        "pending": 0,
+        "taskDefinition": "arn:aws:ecs:ap-southeast-1:585572506644:task-definition/tetris-app:13"
+    },
+    {
+        "service": "tetris-production",
+        "desired": 0,
+        "running": 0,
+        "pending": 0,
+        "taskDefinition": "arn:aws:ecs:ap-southeast-1:585572506644:task-definition/tetris-app:14"
+    }
+]

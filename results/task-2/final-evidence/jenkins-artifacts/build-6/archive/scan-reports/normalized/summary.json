@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "devsecops-summary/v1",
+  "generatedAt": "2026-07-29T15:28:59.229351+00:00",
+  "app": "tetris",
+  "environment": "staging",
+  "commit": "5d2005dd02652ba3154cca6d75f123b9ee724886",
+  "buildNumber": "6",
+  "total": 148,
+  "bySeverity": {
+    "CRITICAL": 0,
+    "HIGH": 2,
+    "MEDIUM": 105,
+    "LOW": 31,
+    "INFORMATIONAL": 10
+  },
+  "byCategory": {
+    "iac": 84,
+    "dast": 36,
+    "sast": 28
+  },
+  "byTool": {
+    "checkov": 84,
+    "owasp-zap": 36,
+    "sonarqube": 28
+  },
+  "missingReports": []
+}

@@ -1,0 +1,10 @@
+NAME                     READY   UP-TO-DATE   AVAILABLE   AGE    CONTAINERS   IMAGES                                         SELECTOR
+deployment.apps/tetris   3/3     3            3           7h8m   tetris       localhost:5001/devsecops/tetris:5d2005dd0265   app=tetris
+
+NAME                          READY   STATUS    RESTARTS   AGE     IP            NODE                     NOMINATED NODE   READINESS GATES
+pod/tetris-86849b8b7f-kxxnz   1/1     Running   0          7m30s   10.42.0.114   k3d-devsecops-server-0   <none>           <none>
+pod/tetris-86849b8b7f-lvtss   1/1     Running   0          7m19s   10.42.0.116   k3d-devsecops-server-0   <none>           <none>
+pod/tetris-86849b8b7f-zlrjk   1/1     Running   0          7m3s    10.42.0.117   k3d-devsecops-server-0   <none>           <none>
+
+NAME                               CLASS   HOSTS                         ADDRESS       PORTS   AGE
+ingress.networking.k8s.io/tetris   nginx   tetris-production.localhost   10.43.196.2   80      7h8m
