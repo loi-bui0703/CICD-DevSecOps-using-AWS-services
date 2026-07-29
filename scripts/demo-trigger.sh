@@ -94,6 +94,29 @@ CRUMB_JSON="$(
 CRUMB_FIELD="$(jq -r '.crumbRequestField' <<< "${CRUMB_JSON}")"
 CRUMB_VALUE="$(jq -r '.crumb' <<< "${CRUMB_JSON}")"
 
+JOB_STATUS="$(
+  curl -sS \
+    -o /dev/null \
+    -w '%{http_code}' \
+    -u "${JENKINS_USER}:${JENKINS_ADMIN_PASS}" \
+    "${JENKINS_URL}/job/${JENKINS_JOB}/api/json"
+)"
+if [ "${JOB_STATUS}" = "404" ]; then
+  echo "Jenkins job ${JENKINS_JOB} does not exist. Creating it from ci/jenkins-job.xml..."
+  curl -fsS \
+    -o /dev/null \
+    -b "${COOKIE_FILE}" \
+    -u "${JENKINS_USER}:${JENKINS_ADMIN_PASS}" \
+    -X POST \
+    -H "${CRUMB_FIELD}: ${CRUMB_VALUE}" \
+    -H 'Content-Type: application/xml' \
+    --data-binary "@${PROJECT_ROOT}/ci/jenkins-job.xml" \
+    "${JENKINS_URL}/createItem?name=${JENKINS_JOB}"
+elif [ "${JOB_STATUS}" != "200" ]; then
+  echo "Cannot inspect Jenkins job ${JENKINS_JOB}: HTTP ${JOB_STATUS}" >&2
+  exit 1
+fi
+
 PARAMETER_API="$(
   curl -g -fsS \
     -u "${JENKINS_USER}:${JENKINS_ADMIN_PASS}" \
