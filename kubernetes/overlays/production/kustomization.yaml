@@ -2,40 +2,40 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: production
 resources:
-  - ../../base
-images:
-  - name: tetris-devsecops
+- ../../base
     # Jenkins replaces this local-safe default after manual approval.
-    newName: localhost:5001/devsecops/tetris
-    newTag: latest
+images:
+- name: tetris-devsecops
+  newName: localhost:5001/devsecops/tetris
+  newTag: 1dba575f066c
 patches:
-  - patch: |-
-      - op: replace
-        path: /spec/replicas
-        value: 3
-    target:
-      kind: Deployment
-      name: tetris
-  - patch: |-
-      - op: replace
-        path: /spec/rules/0/host
-        value: tetris-production.localhost
-    target:
-      kind: Ingress
-      name: tetris
-  - patch: |-
-      - op: replace
-        path: /spec/template/spec/containers/0/resources/requests/cpu
-        value: "100m"
-      - op: replace
-        path: /spec/template/spec/containers/0/resources/requests/memory
-        value: "128Mi"
-      - op: replace
-        path: /spec/template/spec/containers/0/resources/limits/cpu
-        value: "500m"
-      - op: replace
-        path: /spec/template/spec/containers/0/resources/limits/memory
-        value: "256Mi"
-    target:
-      kind: Deployment
-      name: tetris
+- patch: |-
+    - op: replace
+      path: /spec/replicas
+      value: 3
+  target:
+    kind: Deployment
+    name: tetris
+- patch: |-
+    - op: replace
+      path: /spec/rules/0/host
+      value: tetris-production.localhost
+  target:
+    kind: Ingress
+    name: tetris
+- patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/requests/cpu
+      value: "100m"
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/requests/memory
+      value: "128Mi"
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/limits/cpu
+      value: "500m"
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/limits/memory
+      value: "256Mi"
+  target:
+    kind: Deployment
+    name: tetris
