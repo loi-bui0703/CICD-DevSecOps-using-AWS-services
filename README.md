@@ -81,7 +81,7 @@ python3 --version
 ## 1. Chuẩn bị lần đầu
 
 Luôn chạy lệnh từ thư mục root. Hai Argo CD Application local hiện theo dõi
-branch `cicd-gitops`, vì vậy hãy dùng đúng branch, còn không thì modify nhé
+branch `cicd-gitops`, vì vậy hãy dùng đúng branch, còn không thì modify code nhé
 
 ```bash
 cd /Users/loibui/Downloads/devsecops-factory/task-2
@@ -322,9 +322,6 @@ Kết quả mong đợi:
 - S3 có security reports; Lambda chạy không lỗi; Security Hub nhận findings.
 - Prometheus targets đều `UP`; Grafana dashboard hiển thị availability.
 
-Minh chứng của lần kiểm chứng hoàn chỉnh gần nhất nằm tại
-`results/task-2/final-evidence/README.md`.
-
 ## 7. Dừng sau khi demo
 
 Scale ECS về 0 trước để giảm chi phí, rồi dừng local. Không dùng `-v` nếu muốn
@@ -355,7 +352,7 @@ Desktop VM, vì vậy chỉ chạy source tin cậy và dừng stack sau demo.
 `demo-trigger.sh` chủ động từ chối working tree bẩn. Pipeline dùng cùng một
 immutable SHA tag cho staging và production.
 
-## Xử lý lỗi thường gặp
+## Lỗi thường gặp
 
 | Hiện tượng | Kiểm tra/cách xử lý |
 |---|---|
@@ -428,27 +425,3 @@ terraform -chdir=infrastructure/terraform state list
 
 AWS Cost Explorer có độ trễ. Destroy ngăn tài nguyên dự án tiếp tục tạo chi phí
 mới nhưng không xóa chi phí đã phát sinh.
-
-## Giới hạn đã biết
-
-- Frontend giữ `react-scripts@3.4.0` và dependency cũ có chủ đích để demo SCA;
-  xem `app/VULNERABILITIES.md`. Đây không phải baseline cho production thật.
-- Repository không chứa `.env`, Terraform state, AWS key, GitHub token hoặc
-  kubeconfig.
-- Terraform tạo hai ALB; chúng có thể phát sinh phí ngay cả khi ECS desired
-  count bằng `0`.
-- Security scan thành công không đồng nghĩa không có finding. Pipeline lưu và
-  chuẩn hóa finding để phục vụ đánh giá/remediation.
-- Evidence trong `results/` là snapshot lịch sử; khi demo trên account khác nên
-  thu thập lại ảnh và output tương ứng.
-
-## English summary
-
-Run `make setup-env`, configure secrets locally, and use `make bootstrap` to
-start the complete local platform. Validate with `scripts/validate.sh` or
-`FULL_BUILD=true scripts/validate.sh`. After Terraform has provisioned the AWS
-resources and the working tree is clean, run `./scripts/demo-trigger.sh
---dry-run`, then `make demo-trigger`. The pipeline scans, builds, pushes,
-deploys staging, runs DAST, uploads reports, pauses for production approval,
-and promotes the same immutable image to production. Scale ECS back to zero
-and stop the local stack after every demo.
