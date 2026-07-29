@@ -19,7 +19,7 @@ patches:
   - patch: |-
       - op: replace
         path: /spec/rules/0/host
-        value: tetris.example.com
+        value: tetris-production.localhost
     target:
       kind: Ingress
       name: tetris
