@@ -42,7 +42,7 @@ if [ -n "${DIRTY_STATUS}" ]; then
     awk '
       {
         path = substr($0, 4)
-        if (path != "README.md" && path !~ /^docs\\//) {
+        if (path != "README.md" && path !~ /^docs\//) {
           print
         }
       }
