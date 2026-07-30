@@ -21,8 +21,14 @@ def utc_now() -> str:
 def read_json(path: Path) -> Any:
     if not path.exists() or path.stat().st_size == 0:
         return None
-    with path.open("r", encoding="utf-8") as handle:
-        return json.load(handle)
+    content = path.read_text(encoding="utf-8").strip()
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        import re
+        content = re.sub(r'\]\s*\[', '],[', content)
+        content = re.sub(r'\}\s*\{', '},{', content)
+        return json.loads(f"[{content}]")
 
 
 def write_json(path: Path, data: Any) -> None:
@@ -213,11 +219,18 @@ def parse_trivy_container(path: Path, raw_dir: Path, report_uri_prefix: str | No
 
 
 def _checkov_reports(data: Any) -> list[dict[str, Any]]:
-    if isinstance(data, list):
-        return [item for item in data if isinstance(item, dict)]
+    reports = []
     if isinstance(data, dict):
-        return [data]
-    return []
+        reports.append(data)
+    elif isinstance(data, list):
+        for item in data:
+            if isinstance(item, dict):
+                reports.append(item)
+            elif isinstance(item, list):
+                for subitem in item:
+                    if isinstance(subitem, dict):
+                        reports.append(subitem)
+    return reports
 
 
 def parse_checkov(path: Path, raw_dir: Path, report_uri_prefix: str | None) -> list[dict[str, Any]]:
