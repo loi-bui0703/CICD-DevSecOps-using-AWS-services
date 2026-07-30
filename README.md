@@ -353,6 +353,7 @@ cluster k3d nhưng không destroy AWS.
 
 ```bash
 # Xác minh đang dùng đúng account trước khi destroy
+set -a && source .env && set +a && unset AWS_PROFILE
 aws sts get-caller-identity
 
 EXPECTED_AWS_ACCOUNT_ID=5855725***** \

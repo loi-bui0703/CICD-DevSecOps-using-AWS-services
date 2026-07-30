@@ -7,6 +7,14 @@ if [ "${1:-}" != "--yes" ]; then
   exit 2
 fi
 
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -f "${PROJECT_ROOT}/.env" ]; then
+  set -a
+  source "${PROJECT_ROOT}/.env"
+  set +a
+fi
+unset AWS_PROFILE
+
 AWS_REGION="${AWS_REGION:-ap-southeast-1}"
 ECS_CLUSTER="${ECS_CLUSTER:-devsecops-factory-cluster}"
 STAGING_SERVICE="${ECS_STAGING_SERVICE:-tetris-staging}"

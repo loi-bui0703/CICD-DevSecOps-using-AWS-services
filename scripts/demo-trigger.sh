@@ -2,6 +2,13 @@
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -f "${PROJECT_ROOT}/.env" ]; then
+  set -a
+  source "${PROJECT_ROOT}/.env"
+  set +a
+fi
+unset AWS_PROFILE
+
 TERRAFORM_DIR="${PROJECT_ROOT}/infrastructure/terraform"
 JENKINS_URL="${JENKINS_URL:-http://localhost:8080}"
 JENKINS_JOB="${JENKINS_JOB:-devsecops-factory}"

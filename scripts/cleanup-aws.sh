@@ -7,6 +7,13 @@ if [ "${CONFIRM_AWS_CLEANUP:-}" != "devsecops-factory" ]; then
 fi
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -f "${PROJECT_ROOT}/.env" ]; then
+  set -a
+  source "${PROJECT_ROOT}/.env"
+  set +a
+fi
+unset AWS_PROFILE
+
 AWS_REGION="${AWS_REGION:-ap-southeast-1}"
 EXPECTED_AWS_ACCOUNT_ID="${EXPECTED_AWS_ACCOUNT_ID:-}"
 ECS_CLUSTER="${ECS_CLUSTER:-devsecops-factory-cluster}"
