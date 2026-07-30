@@ -40,7 +40,7 @@ flowchart LR
 | Khởi động toàn bộ nền tảng local | `make bootstrap` |
 | Chạy pipeline hoàn chỉnh local + AWS | `make demo-trigger` sau khi chuẩn bị AWS |
 | Tắt local nhưng giữ dữ liệu | `make down` và `k3d cluster stop devsecops` |
-| Đưa hai ECS service về 0 | `AWS_PROFILE_NAME=devsecops-factory make demo-reset` |
+| Đưa hai ECS service về 0 | `make demo-reset` |
 | Xóa hẳn tài nguyên AWS | Quy trình **Xóa toàn bộ AWS** ở cuối README |
 
 `make bootstrap` chỉ dựng nền tảng local và không tạo hạ tầng AWS.
@@ -54,7 +54,8 @@ và AWS credentials hợp lệ.
 - Docker Desktop/Engine, Git và GNU Make.
 - `kubectl`, `helm` và `k3d` cho Kubernetes/Argo CD local.
 - Python 3, `jq`, `curl` và Terraform 1.x.
-- AWS CLI v2 với profile `devsecops-factory` cho luồng AWS.
+- AWS CLI v2; credentials được cấu hình qua `AWS_ACCESS_KEY_ID` và
+  `AWS_SECRET_ACCESS_KEY` trong file `.env` (IAM user access key).
 - Node.js/npm chỉ bắt buộc khi build frontend trực tiếp trên máy host.
 - Cần kết nối Internet ở lần đầu để tải container images, Helm chart,
   Terraform providers và Argo CD manifests.
@@ -205,22 +206,26 @@ của React app.
 
 ## 4. Chuẩn bị hạ tầng AWS
 
-Nếu hạ tầng đã tồn tại, không apply lại đại: đăng nhập và chạy
-`terraform plan`; kết quả mong đợi là `No changes`.
+Nếu hạ tầng đã tồn tại, không apply lại đại: chạy `terraform plan`;
+kết quả mong đợi là `No changes`.
+
+> Credentials AWS được đọc tự động từ biến môi trường `AWS_ACCESS_KEY_ID` và
+> `AWS_SECRET_ACCESS_KEY` đã khai báo trong `.env`. Không cần `aws sso login`
+> hay `--profile`.
 
 ```bash
-aws sso login --profile devsecops-factory
-AWS_PROFILE=devsecops-factory \
-  terraform -chdir=infrastructure/terraform plan
+# Xác minh credentials đang dùng đúng account
+aws sts get-caller-identity
+
+terraform -chdir=infrastructure/terraform plan
 ```
 
 Nếu đây là account/môi trường mới, tạo `terraform.tfvars` và review plan trước
 khi apply:
 
 ```bash
-aws sso login --profile devsecops-factory
-export AWS_PROFILE=devsecops-factory
-aws sts get-caller-identity --profile devsecops-factory
+# Xác minh credentials
+aws sts get-caller-identity
 
 test -e infrastructure/terraform/terraform.tfvars || \
   cp infrastructure/terraform/terraform.tfvars.example \
@@ -251,7 +256,7 @@ gian demo. Hai ALB vẫn có thể phát sinh phí dù ECS đã scale về 0.
 
 Jenkins checkout source đã commit trong branch hiện tại. Trước khi chạy, bảo
 đảm working tree sạch, local platform đang bật, Terraform outputs tồn tại và
-AWS credentials trong `.env` còn hiệu lực:
+`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` trong `.env` còn hiệu lực:
 
 ```bash
 git status --short
@@ -260,8 +265,9 @@ make k3d-create
 make gitops-seed
 make argocd-apps
 
-aws sso login --profile devsecops-factory
-AWS_PROFILE_NAME=devsecops-factory make demo-reset
+# Xác minh credentials trước khi chạy
+aws sts get-caller-identity
+make demo-reset
 
 # Chỉ preflight, chưa tạo Jenkins build: (action này yêu cầu working tree sạch, push all changes)
 ./scripts/demo-trigger.sh --dry-run
@@ -269,19 +275,14 @@ AWS_PROFILE_NAME=devsecops-factory make demo-reset
 # Trigger preset FULL_PROJECT_DEMO:
 make demo-trigger
 ```
-Lưu ý, trong quá trình chờ các stages for completion thì có thể session của AWS hết hạn, cần lấy lại bằng các bước sau:
 
-```bash
-# refresh session
-aws sso login --profile devsecops-factory
-
-# Lấy toàn bộ creadentials mới nhất
-aws configure export-credentials --profile devsecops-factory
-
-# Cập nhật creadentials vào file .env
-# Refresh jenkins
-docker compose restart jenkins
-```
+> **Lưu ý:** Vì dùng IAM user access key (long-lived), credentials không tự hết hạn
+> như SSO session. Nếu Jenkins báo lỗi credential AWS, kiểm tra `.env` có đúng
+> `AWS_ACCESS_KEY_ID` và `AWS_SECRET_ACCESS_KEY`, rồi restart Jenkins:
+>
+> ```bash
+> docker compose restart jenkins
+> ```
 
 `demo-trigger.sh` tự tạo Jenkins job nếu chưa có và đọc ECR, ECS, S3, ALB cùng
 Lambda từ Terraform outputs. Luồng gồm 22 stage:
@@ -315,7 +316,6 @@ curl -I http://tetris-staging.localhost
 curl -I http://tetris-production.localhost
 
 aws ecs describe-services \
-  --profile devsecops-factory \
   --region ap-southeast-1 \
   --cluster devsecops-factory-cluster \
   --services tetris-staging tetris-production \
@@ -341,7 +341,7 @@ Scale ECS về 0 trước để giảm chi phí, rồi dừng local. Không dùn
 giữ Jenkins history, SonarQube data và scanner cache:
 
 ```bash
-AWS_PROFILE_NAME=devsecops-factory make demo-reset
+make demo-reset
 make down
 k3d cluster stop devsecops
 ```
@@ -352,10 +352,9 @@ cluster k3d nhưng không destroy AWS.
 ## 8. Dừng toàn bộ tài nguyên AWS
 
 ```bash
-aws sso login --profile devsecops-factory
-aws sts get-caller-identity --profile devsecops-factory
+# Xác minh đang dùng đúng account trước khi destroy
+aws sts get-caller-identity
 
-AWS_PROFILE=devsecops-factory \
 EXPECTED_AWS_ACCOUNT_ID=5855725***** \
 CONFIRM_AWS_CLEANUP=devsecops-factory \
 DESTROY_TERRAFORM=true \
@@ -423,8 +422,8 @@ local stack và kiểm tra đúng account:
 make down
 k3d cluster stop devsecops
 
-aws sso login --profile devsecops-factory
-aws sts get-caller-identity --profile devsecops-factory
+# Xác minh credentials đang dùng đúng account
+aws sts get-caller-identity
 ```
 
 Với môi trường hiện tại, account ID đã kiểm chứng là `5855725*****`. Không tiếp
@@ -432,7 +431,6 @@ tục nếu đang đăng nhập account khác. Xem destroy plan và chỉ nhập
 phạm vi đúng:
 
 ```bash
-AWS_PROFILE=devsecops-factory \
 EXPECTED_AWS_ACCOUNT_ID=5855725***** \
 CONFIRM_AWS_CLEANUP=devsecops-factory \
 DESTROY_TERRAFORM=true \
