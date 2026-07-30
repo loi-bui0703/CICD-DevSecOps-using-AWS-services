@@ -5,5 +5,5 @@ budget_notification_email = "your-email@example.com"
 container_port            = 8080
 staging_desired_count     = 0
 production_desired_count  = 0
-enable_security_hub_importer = false
-create_local_jenkins_user     = false
+enable_security_hub_importer = true
+create_local_jenkins_user     = true

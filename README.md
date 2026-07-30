@@ -343,7 +343,7 @@ aws sso login --profile devsecops-factory
 aws sts get-caller-identity --profile devsecops-factory
 
 AWS_PROFILE=devsecops-factory \
-EXPECTED_AWS_ACCOUNT_ID=585572506644 \
+EXPECTED_AWS_ACCOUNT_ID=5855725***** \
 CONFIRM_AWS_CLEANUP=devsecops-factory \
 DESTROY_TERRAFORM=true \
 ./scripts/cleanup-aws.sh
@@ -414,13 +414,13 @@ aws sso login --profile devsecops-factory
 aws sts get-caller-identity --profile devsecops-factory
 ```
 
-Với môi trường hiện tại, account ID đã kiểm chứng là `585572506644`. Không tiếp
+Với môi trường hiện tại, account ID đã kiểm chứng là `5855725*****`. Không tiếp
 tục nếu đang đăng nhập account khác. Xem destroy plan và chỉ nhập `yes` khi
 phạm vi đúng:
 
 ```bash
 AWS_PROFILE=devsecops-factory \
-EXPECTED_AWS_ACCOUNT_ID=585572506644 \
+EXPECTED_AWS_ACCOUNT_ID=5855725***** \
 CONFIRM_AWS_CLEANUP=devsecops-factory \
 DESTROY_TERRAFORM=true \
 ./scripts/cleanup-aws.sh
