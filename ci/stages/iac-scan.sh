@@ -39,6 +39,10 @@ docker run --rm \
   --volumes-from "${CHECKOV_DATA_CONTAINER}" \
   bridgecrew/checkov:latest \
   --directory /tf/scan-target \
+  --skip-path node_modules \
+  --skip-path .git \
+  --skip-path .scannerwork \
+  --skip-path scan-reports \
   --soft-fail \
   --quiet
 
@@ -47,6 +51,10 @@ docker run --rm \
   --volumes-from "${CHECKOV_DATA_CONTAINER}" \
   bridgecrew/checkov:latest \
   --directory /tf/scan-target \
+  --skip-path node_modules \
+  --skip-path .git \
+  --skip-path .scannerwork \
+  --skip-path scan-reports \
   --soft-fail \
   --output json > "${JSON_REPORT}"
 
