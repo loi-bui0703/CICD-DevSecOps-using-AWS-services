@@ -269,6 +269,19 @@ AWS_PROFILE_NAME=devsecops-factory make demo-reset
 # Trigger preset FULL_PROJECT_DEMO:
 make demo-trigger
 ```
+Lưu ý, trong quá trình chờ các stages for completion thì có thể session của AWS hết hạn, cần lấy lại bằng các bước sau:
+
+```bash
+# refresh session
+aws sso login --profile devsecops-factory
+
+# Lấy toàn bộ creadentials mới nhất
+aws configure export-credentials --profile devsecops-factory
+
+# Cập nhật creadentials vào file .env
+# Refresh jenkins
+docker compose restart jenkins
+```
 
 `demo-trigger.sh` tự tạo Jenkins job nếu chưa có và đọc ECR, ECS, S3, ALB cùng
 Lambda từ Terraform outputs. Luồng gồm 22 stage:
@@ -343,7 +356,7 @@ aws sso login --profile devsecops-factory
 aws sts get-caller-identity --profile devsecops-factory
 
 AWS_PROFILE=devsecops-factory \
-EXPECTED_AWS_ACCOUNT_ID=585572506644 \
+EXPECTED_AWS_ACCOUNT_ID=5855725***** \
 CONFIRM_AWS_CLEANUP=devsecops-factory \
 DESTROY_TERRAFORM=true \
 ./scripts/cleanup-aws.sh
@@ -414,13 +427,13 @@ aws sso login --profile devsecops-factory
 aws sts get-caller-identity --profile devsecops-factory
 ```
 
-Với môi trường hiện tại, account ID đã kiểm chứng là `585572506644`. Không tiếp
+Với môi trường hiện tại, account ID đã kiểm chứng là `5855725*****`. Không tiếp
 tục nếu đang đăng nhập account khác. Xem destroy plan và chỉ nhập `yes` khi
 phạm vi đúng:
 
 ```bash
 AWS_PROFILE=devsecops-factory \
-EXPECTED_AWS_ACCOUNT_ID=585572506644 \
+EXPECTED_AWS_ACCOUNT_ID=5855725***** \
 CONFIRM_AWS_CLEANUP=devsecops-factory \
 DESTROY_TERRAFORM=true \
 ./scripts/cleanup-aws.sh

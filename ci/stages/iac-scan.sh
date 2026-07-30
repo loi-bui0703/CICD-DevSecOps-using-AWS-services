@@ -34,6 +34,10 @@ docker create -v /tf --name "${CHECKOV_DATA_CONTAINER}" alpine:latest /bin/true 
 echo "[*] Copying scan target into temporary volume..."
 docker cp "${SCAN_DIR}" "${CHECKOV_DATA_CONTAINER}:/tf/scan-target"
 
+echo "[*] Removing heavy/unnecessary directories from temporary volume to prevent Checkov hang..."
+docker run --rm --volumes-from "${CHECKOV_DATA_CONTAINER}" alpine:latest \
+  sh -c "rm -rf /tf/scan-target/node_modules /tf/scan-target/app/node_modules /tf/scan-target/.git /tf/scan-target/scan-reports"
+
 echo "[*] Running Checkov summary..."
 docker run --rm \
   --volumes-from "${CHECKOV_DATA_CONTAINER}" \
