@@ -13,7 +13,7 @@ LEGACY_ISSUES_REPORT="${SCAN_REPORT_DIR}/sonar-issues.json"
 TOOL_BASE_DIR="${SAST_TOOL_DIR:-${JENKINS_HOME:-${WORKSPACE:-$(pwd)}}/.tools/sast}"
 SCANNER_VERSION="${SONAR_SCANNER_VERSION:-5.0.1.3006}"
 SCANNER_HOME="${TOOL_BASE_DIR}/sonar-scanner"
-NODE_VERSION="${NODE_VERSION:-v24.18.0}"
+NODE_VERSION="${NODE_VERSION:-v20.18.0}"
 NODE_HOME="${TOOL_BASE_DIR}/nodejs"
 SONAR_SOURCES="${SONAR_SOURCES:-app/src}"
 SONAR_EXCLUSIONS="${SONAR_EXCLUSIONS:-**/node_modules/**,**/dist/**,**/build/**,**/.git/**,**/*.png,**/*.jpg,**/*.jpeg,**/*.gif}"
@@ -45,6 +45,14 @@ else
   fi
 fi
 
+if [ -x "${NODE_HOME}/bin/node" ]; then
+  CURRENT_NODE_VER=$("${NODE_HOME}/bin/node" -v)
+  if [ "${CURRENT_NODE_VER}" != "${NODE_VERSION}" ]; then
+    echo "[*] Cached Node.js is ${CURRENT_NODE_VER}, but want ${NODE_VERSION}. Clearing cache..."
+    rm -rf "${NODE_HOME}"
+  fi
+fi
+
 if [ ! -x "${NODE_HOME}/bin/node" ]; then
   ARCH="$(uname -m)"
   case "${ARCH}" in
@@ -53,7 +61,7 @@ if [ ! -x "${NODE_HOME}/bin/node" ]; then
     *) echo "[!] Unsupported architecture for Node.js install: ${ARCH}"; exit 1 ;;
   esac
 
-  echo "[*] Node.js not found. Installing ${NODE_VERSION} for ${NODE_ARCH}..."
+  echo "[*] Node.js not found or version mismatched. Installing ${NODE_VERSION} for ${NODE_ARCH}..."
   mkdir -p "${NODE_HOME}"
   curl -sSLo /tmp/nodejs.tar.gz "https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-${NODE_ARCH}.tar.gz"
   tar -xzf /tmp/nodejs.tar.gz -C "${NODE_HOME}" --strip-components=1
