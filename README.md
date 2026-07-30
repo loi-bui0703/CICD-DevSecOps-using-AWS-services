@@ -269,6 +269,19 @@ AWS_PROFILE_NAME=devsecops-factory make demo-reset
 # Trigger preset FULL_PROJECT_DEMO:
 make demo-trigger
 ```
+Lưu ý, trong quá trình chờ các stages for completion thì có thể session của AWS hết hạn, cần lấy lại bằng các bước sau:
+
+```bash
+# refresh session
+aws sso login --profile devsecops-factory
+
+# Lấy toàn bộ creadentials mới nhất
+aws configure export-credentials --profile devsecops-factory
+
+# Cập nhật creadentials vào file .env
+# Refresh jenkins
+docker compose restart jenkins
+```
 
 `demo-trigger.sh` tự tạo Jenkins job nếu chưa có và đọc ECR, ECS, S3, ALB cùng
 Lambda từ Terraform outputs. Luồng gồm 22 stage:
