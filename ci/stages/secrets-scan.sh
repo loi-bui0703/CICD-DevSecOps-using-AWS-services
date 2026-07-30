@@ -38,6 +38,7 @@ gitleaks detect \
   --source "${SCAN_DIR}" \
   --report-path "${REPORT_FILE}" \
   --report-format json \
+  --log-opts="-1" \
   --no-banner
 GITLEAKS_EXIT=$?
 set -e
