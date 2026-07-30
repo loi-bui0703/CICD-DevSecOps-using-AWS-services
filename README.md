@@ -347,7 +347,17 @@ k3d cluster stop devsecops
 ```
 
 `make down` không xóa named volumes. `make clean` xóa container local và
-cluster k3d nhưng không destroy AWS.
+cluster k3d nhưng không destroy AWS. Nếu muốn xoá toàn bộ tài nguyên như Docker container, k3d hay các volumes chứa SONAR_DATA khi không muốn demo nữa thì chạy:
+
+```bash
+# Xóa container và Kubernetes cluster cục bộ
+make clean
+# Xóa toàn bộ dữ liệu (Database, cấu hình, Jenkins history)
+make clean-volumes
+# Xóa các image Docker kích thước lớn (Tùy chọn). Dự án này đã tải về rất nhiều image nặng (Jenkins, ZAP, Sonar, k3d). Nếu bạn muốn lấy lại toàn bộ 10-15GB ổ cứng, chạy:
+docker system prune -a --volumes
+# Sẽ xóa TẤT CẢ các image, container, và network không được sử dụng trên Docker của bạn, kể cả của các dự án khác -> nên xoá thủ công
+```
 
 ## 8. Dừng toàn bộ tài nguyên AWS
 
