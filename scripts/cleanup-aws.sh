@@ -7,13 +7,12 @@ if [ "${CONFIRM_AWS_CLEANUP:-}" != "devsecops-factory" ]; then
 fi
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-AWS_PROFILE="${AWS_PROFILE:-${AWS_PROFILE_NAME:-devsecops-factory}}"
 AWS_REGION="${AWS_REGION:-ap-southeast-1}"
 EXPECTED_AWS_ACCOUNT_ID="${EXPECTED_AWS_ACCOUNT_ID:-}"
 ECS_CLUSTER="${ECS_CLUSTER:-devsecops-factory-cluster}"
 ECS_TASK_FAMILY="${ECS_TASK_FAMILY:-tetris-app}"
 
-export AWS_PROFILE AWS_REGION
+export AWS_REGION
 
 actual_account_id="$(aws sts get-caller-identity --query Account --output text)"
 if [ -n "${EXPECTED_AWS_ACCOUNT_ID}" ] && [ "${actual_account_id}" != "${EXPECTED_AWS_ACCOUNT_ID}" ]; then
@@ -22,7 +21,7 @@ if [ -n "${EXPECTED_AWS_ACCOUNT_ID}" ] && [ "${actual_account_id}" != "${EXPECTE
 fi
 
 echo "AWS cleanup account: ${actual_account_id}"
-echo "AWS profile/region: ${AWS_PROFILE}/${AWS_REGION}"
+echo "AWS region: ${AWS_REGION}"
 
 cluster_status="$(
   aws ecs describe-clusters \
