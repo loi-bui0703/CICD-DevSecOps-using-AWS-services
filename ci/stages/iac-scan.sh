@@ -38,11 +38,10 @@ echo "[*] Running Checkov summary..."
 docker run --rm \
   --volumes-from "${CHECKOV_DATA_CONTAINER}" \
   bridgecrew/checkov:latest \
-  --directory /tf/scan-target \
-  --skip-path node_modules \
-  --skip-path .git \
-  --skip-path .scannerwork \
-  --skip-path scan-reports \
+  --directory /tf/scan-target/infrastructure \
+  --directory /tf/scan-target/kubernetes \
+  --directory /tf/scan-target/ci \
+  --directory /tf/scan-target/app \
   --soft-fail \
   --quiet
 
@@ -50,11 +49,10 @@ echo "[*] Generating JSON report..."
 docker run --rm \
   --volumes-from "${CHECKOV_DATA_CONTAINER}" \
   bridgecrew/checkov:latest \
-  --directory /tf/scan-target \
-  --skip-path node_modules \
-  --skip-path .git \
-  --skip-path .scannerwork \
-  --skip-path scan-reports \
+  --directory /tf/scan-target/infrastructure \
+  --directory /tf/scan-target/kubernetes \
+  --directory /tf/scan-target/ci \
+  --directory /tf/scan-target/app \
   --soft-fail \
   --output json > "${JSON_REPORT}"
 
